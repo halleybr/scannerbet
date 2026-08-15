@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- GitHub Pages serve HTML com Cache-Control: max-age=600 (até 10 min de cache).
+     Estas metas pedem ao navegador para revalidar a página a cada visita. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>🔥 Scanner AO VIVO — RoboBet</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
 <style>
@@ -197,6 +202,7 @@
     Quando um indicador não está disponível na RoboBet (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente entre os indicadores disponíveis — nenhum número é inventado.
     Somente partidas com <b>≥ 70/100</b> e dados suficientes entram na lista de oportunidades.</p>
     <p style="margin-top:6px">⚠️ Scanner de oportunidades — os dados vêm em tempo real da RoboBet.app e podem conter atraso. Isto <b>não</b> é recomendação de aposta e nada é garantido.</p>
+    <p style="margin-top:10px;font-size:11px">Build <b id="build"></b> · a página é estática — os dados ao vivo vêm direto da API da RoboBet a cada ciclo, nada é gravado no GitHub Pages. Se o número do build aqui não mudar após um push, é cache do navegador (recarregue com Ctrl+Shift+R).</p>
   </footer>
 </div>
 
@@ -212,6 +218,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
+const BUILD = "2026-08-15T23:30-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -249,14 +256,23 @@ function numOrNull(v) { return (typeof v === "number" && isFinite(v)) ? v : (typ
 function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
 const pl = (n, s, p) => n + " " + (n === 1 ? s : (p || s + "s"));
 
-async function fetchJSON(url, timeoutMs = 25000) {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const r = await fetch(url, { signal: ctl.signal, headers: { "Accept": "application/json" } });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
-  } finally { clearTimeout(t); }
+
+
+async function fetchJSON(url, timeoutMs = 25000, retries = 1) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { signal: ctl.signal, headers: { "Accept": "application/json" } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) await new Promise(res => setTimeout(res, 1200 * (attempt + 1)));
+    } finally { clearTimeout(t); }
+  }
+  throw lastErr;
 }
 
 async function pool(items, limit, fn) {
@@ -276,7 +292,7 @@ async function pool(items, limit, fn) {
 async function tick() {
   if (state.paused) return;
   try {
-    const inplay = await fetchJSON(API + "/inplay/list.json");
+    const inplay = await fetchJSON(API + "/inplay/list.json", 25000, 2);
     const live = (inplay.events || []).filter(e => e && e.isLive && e.status === "live");
     const ids = live.map(e => e.id);
     const now = Date.now();
@@ -285,12 +301,12 @@ async function tick() {
     const [stats, today] = await Promise.all([
       pool(ids, 6, async (id) => {
         try {
-          const ls = await fetchJSON(`${API}/events/${id}/live-stats`);
+          const ls = await fetchJSON(`${API}/events/${id}/live-stats`, 25000, 0);
           return ls && ls.success ? ls : null;
         } catch { return null; }
       }),
       (!state.todayLoaded || state.cycle % 3 === 0)
-        ? fetchJSON(API + "/events/today", 30000)
+        ? fetchJSON(API + "/events/today", 30000, 2)
         : Promise.resolve(null),
     ]);
     if (today) { applyTodayOverlay(today); state.todayLoaded = true; }
@@ -960,6 +976,7 @@ $("refresh").addEventListener("click", () => { $("hud-next").textContent = "atua
 /* debug (útil para testes) */
 window.__rb = { state, analyze, suggestEntry, buildReason, tg: { tgPush, tgSend, get tg() { return tg; } } };
 syncTgUI();
+$("build").textContent = BUILD;
 
 /* primeira carga */
 tick();
