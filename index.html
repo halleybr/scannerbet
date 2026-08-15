@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔥 Scanner AO VIVO — RoboBet</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+<style>
+  :root{
+    --bg:#0b0f19; --panel:#111827; --panel2:#0f172a; --line:#1f2937;
+    --text:#e5e7eb; --muted:#94a3b8; --dim:#64748b;
+    --red:#ef4444; --green:#22c55e; --amber:#f59e0b; --blue:#3b82f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--text);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif}
+  a{color:var(--blue);text-decoration:none}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+    padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
+  h1{font-size:20px;font-weight:700;letter-spacing:.3px}
+  h1 .live{color:var(--red)}
+  h1 small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+  .hud{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
+    font-size:12px;color:var(--muted)}
+  .chip b{color:var(--text)}
+  .chip .red{color:var(--red)}
+  select,button{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:var(--muted)}
+  .err{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;border-radius:10px;
+    padding:10px 14px;margin-bottom:14px;font-size:13px;display:none}
+  section{margin-bottom:22px}
+  h2{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  h2 .n{color:var(--dim);font-weight:600;font-size:12px}
+  /* alerts */
+  .alerts{display:flex;flex-direction:column;gap:8px}
+  .alert{border-radius:10px;padding:10px 14px;font-size:13px;border:1px solid var(--line)}
+  .alert.detected{background:#052e16;border-color:#14532d}
+  .alert.lost{background:#450a0a;border-color:#7f1d1d}
+  .alert .ttl{font-weight:700;font-size:12px;letter-spacing:.4px}
+  .alert.detected .ttl{color:var(--green)} .alert.lost .ttl{color:var(--red)}
+  .alert .when{float:right;color:var(--dim);font-size:11px}
+  .alert .det{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .alert .det b{color:var(--text)}
+  /* ranking table */
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+  th{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;
+    letter-spacing:.5px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .score-pill{display:inline-block;min-width:52px;text-align:center;font-weight:700;border-radius:8px;
+    padding:3px 8px;font-size:13px}
+  .s80{background:rgba(34,197,94,.16);color:#4ade80;border:1px solid rgba(34,197,94,.35)}
+  .s70{background:rgba(245,158,11,.14);color:#fbbf24;border:1px solid rgba(245,158,11,.35)}
+  .teams{font-weight:600}
+  .lg{color:var(--dim);font-size:11px}
+  .entry-tag{font-size:12px;font-weight:600;color:#4ade80;white-space:nowrap}
+  .entry-tag.alt{color:#fbbf24}
+  .nd{color:var(--dim)}
+  .empty{padding:26px;text-align:center;color:var(--muted);border:1px dashed var(--line);
+    border-radius:10px;font-size:14px}
+  .empty b{color:var(--text)}
+  /* cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card .top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+  .card .leag{color:var(--dim);font-size:11px}
+  .card .vs{font-size:16px;font-weight:700}
+  .card .meta{color:var(--muted);font-size:12px;margin:2px 0 10px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;font-size:12.5px;margin-bottom:10px}
+  .stats .row{display:flex;justify-content:space-between;gap:8px}
+  .stats .k{color:var(--muted)} .stats .v{font-weight:600}
+  .spark{margin-top:2px;width:100%;height:34px}
+  .entry{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .entry .lab{font-size:11px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px}
+  .entry .mk{font-weight:700;font-size:14px}
+  .entry .odds{font-size:12px;color:var(--muted)}
+  .entry .odds b{color:var(--text)}
+  .conf{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin-left:6px}
+  .conf.high{background:rgba(34,197,94,.15);color:#4ade80}
+  .conf.mid{background:rgba(245,158,11,.15);color:#fbbf24}
+  .strong{color:#4ade80} .interest{color:#fbbf24}
+  .why{font-size:12px;color:var(--muted);margin-top:8px}
+  .why b{color:var(--text)}
+  details{border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  summary{cursor:pointer;padding:12px 14px;font-size:13px;font-weight:600;color:var(--muted)}
+  summary:hover{color:var(--text)}
+  details[open] summary{border-bottom:1px solid var(--line)}
+  details .tbl-wrap{border:none;border-radius:0 0 10px 10px}
+  /* history */
+  .hres{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap}
+  .hres.green{background:rgba(34,197,94,.15);color:#4ade80}
+  .hres.red{background:rgba(239,68,68,.15);color:#f87171}
+  .hres.na{background:rgba(148,163,184,.15);color:#cbd5e1}
+  footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px}
+  footer b{color:var(--muted)}
+  .badge{display:inline-block;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35);
+    border-radius:6px;font-size:10.5px;font-weight:700;padding:1px 6px;margin-left:6px;letter-spacing:.5px}
+  .fire{color:#f87171}
+  /* telegram */
+  .tg-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .tg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end}
+  .tg-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+  .tg-grid input[type=text],.tg-grid input[type=password]{background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  .tg-grid input:focus{outline:none;border-color:var(--blue)}
+  .tg-grid .chk{flex-direction:row;align-items:center;gap:7px;font-size:12.5px;color:var(--text)}
+  .tg-grid .chk input{accent-color:var(--blue);width:15px;height:15px}
+  .tg-status{font-size:12.5px;color:var(--muted);margin-top:10px;min-height:16px}
+  .tg-note{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.5}
+  .tg-note code{background:var(--panel2);padding:1px 5px;border-radius:4px;color:#93c5fd}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="live">🔴 SCANNER AO VIVO</span> — ROBÔBET
+      <small>Fonte de dados: <a href="https://robobet.app" target="_blank" rel="noopener">RoboBet.app</a> · gráficos ao vivo (xG, momentum, escanteios, chutes)</small>
+    </h1>
+    <div class="hud">
+      <span class="chip">Jogos vivos: <b class="red" id="hud-live">–</b></span>
+      <span class="chip">Atualizado: <b id="hud-updated">–</b></span>
+      <span class="chip">Próxima: <b id="hud-next">–</b></span>
+      <select id="interval" title="Intervalo de atualização">
+        <option value="30">30s</option>
+        <option value="60" selected>60s</option>
+        <option value="120">2min</option>
+      </select>
+      <button id="pause">⏸ Pausar</button>
+      <button id="refresh">⟳ Agora</button>
+      <button id="tgOpen" title="Alertas no Telegram">✈️ Telegram</button>
+    </div>
+  </header>
+
+  <div class="tg-panel" id="tgPanel" style="display:none">
+    <h2 style="margin-bottom:10px">✈️ ALERTAS NO TELEGRAM <span class="n">envio direto do navegador via Bot API</span></h2>
+    <div class="tg-grid">
+      <label>Bot token
+        <input type="password" id="tgToken" placeholder="123456789:AAH..." autocomplete="off" spellcheck="false">
+      </label>
+      <label>Chat ID (grupo ou usuário)
+        <input type="text" id="tgChat" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="chk"><input type="checkbox" id="tgDet"> Enviar ao detectar oportunidade</label>
+      <label class="chk"><input type="checkbox" id="tgLost"> Enviar ao perder força</label>
+      <div style="display:flex;gap:8px">
+        <button id="tgTest">Enviar teste</button>
+        <button id="tgToggle">Ativar</button>
+      </div>
+    </div>
+    <div class="tg-status" id="tgStatus"></div>
+    <p class="tg-note">1) Crie um bot com <code>@BotFather</code> e copie o token. 2) Inicie o bot (<code>/start</code>) e descubra o chat id com <code>@userinfobot</code> (grupo: use um id negativo tipo <code>-1001234567890</code>).
+    3) Clique em <b>Enviar teste</b>. Os alertas de 🚨 oportunidade detectada / perdeu força serão enviados automaticamente.
+    ⚠️ O token fica salvo <b>apenas neste navegador</b> (localStorage) — use um bot dedicado e não compartilhe a página com o token preenchido.</p>
+  </div>
+
+  <div class="err" id="errbox"></div>
+
+  <section id="alerts-sec" style="display:none">
+    <h2>🚨 ALERTAS <span class="n">oportunidades detectadas / perderam força</span></h2>
+    <div class="alerts" id="alerts"></div>
+  </section>
+
+  <section>
+    <h2>🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100</span></h2>
+    <div id="ranking"></div>
+  </section>
+
+  <section id="cards-sec" style="display:none">
+    <h2>📋 DETALHES DAS OPORTUNIDADES</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section>
+    <h2>👁 MONITOR DE TODOS OS JOGOS AO VIVO <span class="n">transparência — abaixo de 70/100 não são apresentados como entrada</span></h2>
+    <details>
+      <summary id="monitor-summary">Mostrar todos os jogos ao vivo monitorados</summary>
+      <div class="tbl-wrap"><table id="monitor"><thead>
+        <tr><th>Jogo</th><th>Campeonato</th><th>Min</th><th>Placar</th><th>Score</th><th>xG</th><th>Momentum</th><th>Esc</th><th>Chutes (alvo)</th><th>Ataq. perig.</th></tr>
+      </thead><tbody></tbody></table></div>
+    </details>
+  </section>
+
+  <section id="hist-sec" style="display:none">
+    <h2>📒 ENTRADAS DETECTADAS <span class="n">histórico para avaliar o desempenho do modelo</span></h2>
+    <div class="tbl-wrap"><table id="hist"><thead>
+      <tr><th>Horário</th><th>Jogo</th><th>Min</th><th>Mercado</th><th>Odd</th><th>Score</th><th>Resultado</th></tr>
+    </thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>
+    <p><b>Como o modelo funciona:</b> intensidade de 0 a 100 = xG (30 pts) + Momentum (25 pts) + Escanteios (20 pts) + Chutes/Chutes no alvo (15 pts) + Ataques perigosos (10 pts).
+    Quando um indicador não está disponível na RoboBet (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente entre os indicadores disponíveis — nenhum número é inventado.
+    Somente partidas com <b>≥ 70/100</b> e dados suficientes entram na lista de oportunidades.</p>
+    <p style="margin-top:6px">⚠️ Scanner de oportunidades — os dados vêm em tempo real da RoboBet.app e podem conter atraso. Isto <b>não</b> é recomendação de aposta e nada é garantido.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   SCANNER AO VIVO — ROBÔBET
+   Fonte exclusiva de dados: RoboBet.app (m.robobet.app/api)
+   - GET /inplay/list.json        → jogos ao vivo (times, placar, minuto, odd 1x2, mercados abertos)
+   - GET /events/{id}/live-stats  → estatísticas ao vivo + momentum + pressão de escanteio + indicadores
+   - GET /events/today            → overlay com odds/probabilidades dos mercados (gols/escanteios)
+   Nenhum número é inventado: se o dado não existe na API, mostramos N/D.
+   ============================================================ */
+
+const API = "https://m.robobet.app/api";
+const MIN_SCORE = 70;         // filtro mínimo (spec §8)
+const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
+const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
+const HISTORY_LIMIT = 200;
+const ALERT_LIMIT = 40;
+
+/* ---------------- estado ---------------- */
+const state = {
+  matches: new Map(),      // id -> match (dados inplay + liveStats + forecast)
+  prevScores: new Map(),   // id -> {score, present, tracked}
+  alerts: loadLS("rb_alerts", []),
+  history: loadLS("rb_history", []),
+  intervalMs: 60_000,
+  paused: false,
+  cycle: 0,
+  timer: null,
+  nextAt: null,
+  lastError: null,
+  todayLoaded: false,
+  finishedScores: {},         // id -> {h,a} placares finais (para resolver histórico)
+  todayForecast: new Map(),   // id -> overlay de mercados/probabilidades do /events/today
+};
+
+function loadLS(k, dflt) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? dflt; } catch { return dflt; } }
+function saveLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+function save() { saveLS("rb_alerts", state.alerts.slice(0, ALERT_LIMIT)); saveLS("rb_history", state.history.slice(0, HISTORY_LIMIT)); }
+
+/* ---------------- helpers ---------------- */
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const round1 = (x) => Math.round(x * 10) / 10;
+const round2 = (x) => Math.round(x * 100) / 100;
+const fmt = (x, d = 2) => (x == null ? "N/D" : Number(x).toFixed(d));
+function numOrNull(v) { return (typeof v === "number" && isFinite(v)) ? v : (typeof v === "string" && v !== "" && isFinite(+v) ? +v : null); }
+function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
+const pl = (n, s, p) => n + " " + (n === 1 ? s : (p || s + "s"));
+
+async function fetchJSON(url, timeoutMs = 25000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctl.signal, headers: { "Accept": "application/json" } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+async function pool(items, limit, fn) {
+  const out = new Map();
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) {
+      const id = items[i++];
+      try { out.set(id, await fn(id)); } catch { /* item falhou -> tratado pelo chamador */ }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/* ---------------- coleta ---------------- */
+async function tick() {
+  if (state.paused) return;
+  try {
+    const inplay = await fetchJSON(API + "/inplay/list.json");
+    const live = (inplay.events || []).filter(e => e && e.isLive && e.status === "live");
+    const ids = live.map(e => e.id);
+    const now = Date.now();
+
+    // live-stats (paralelo, limite 6) + overlay de mercados/odds (events/today, a cada 3 ciclos)
+    const [stats, today] = await Promise.all([
+      pool(ids, 6, async (id) => {
+        try {
+          const ls = await fetchJSON(`${API}/events/${id}/live-stats`);
+          return ls && ls.success ? ls : null;
+        } catch { return null; }
+      }),
+      (!state.todayLoaded || state.cycle % 3 === 0)
+        ? fetchJSON(API + "/events/today", 30000)
+        : Promise.resolve(null),
+    ]);
+    if (today) { applyTodayOverlay(today); state.todayLoaded = true; }
+
+    // remove jogos que terminaram (resolve resultado no histórico)
+    const liveSet = new Set(ids);
+    for (const [id, gone] of Array.from(state.matches)) if (!liveSet.has(id)) {
+      resolveFinished(gone);
+      state.matches.delete(id);
+    }
+
+    for (const e of live) {
+      const ls = stats.get(e.id);
+      const prev = state.matches.get(e.id) || null;
+      const m = {
+        id: e.id, slug: e.slug, fi_id: e.fi_id, league: (e.league && e.league.name) || "N/D",
+        home: e.home || "—", away: e.away || "—",
+        scoreHome: e.scoreHome ?? 0, scoreAway: e.scoreAway ?? 0,
+        minute: numOrNull(e.minute) ?? 0, period: e.period || "", time: e.time || "",
+        odds: Array.isArray(e.odds) ? e.odds : [],
+        redH: !!e.redCardHome, redA: !!e.redCardAway,
+        hasCornersMarket: !!e.has_corners_market,
+        liveStats: ls || (prev && prev.liveStats) || null,   // mantém último dado bom se a chamada falhar
+        statsAge: ls ? now : (prev ? prev.statsAge : null),
+        forecast: (prev && prev.forecast) || state.todayForecast.get(e.id) || null,
+      };
+      state.matches.set(e.id, m);
+    }
+
+    renderAll();
+    maybeAlerts();
+    save();
+
+    state.cycle++;
+    state.lastError = null;
+    $("errbox").style.display = "none";
+  } catch (err) {
+    state.lastError = String(err && err.message || err);
+    $("errbox").textContent = "⚠️ Não foi possível atualizar os dados da RoboBet (" + state.lastError +
+      "). Mantendo os últimos dados válidos na tela — nova tentativa em instantes.";
+    $("errbox").style.display = "block";
+  } finally {
+    scheduleNext();
+  }
+}
+
+/* Overlay de mercados (odds/probabilidades) a partir de /events/today.
+   Guarda um mapa id -> forecast (independente da ordem de carregamento) e
+   os placares finais para resolver o histórico. */
+function applyTodayOverlay(today) {
+  const now = Date.now();
+  state.finishedScores = {};
+  const fmap = new Map();
+  for (const lg of (today.leagues || [])) {
+    for (const mt of (lg.matches || [])) {
+      if (mt.status === "finished" && mt.scoreHome != null) state.finishedScores[mt.id] = { h: mt.scoreHome, a: mt.scoreAway };
+      const fd = mt.forecast_data || {};
+      const mk = fd.markets || {};
+      const f = {
+        ts: now,
+        over_goals: mk.over_goals || null,
+        corners: mk.corners || null,
+        winner: mk.winner || null,
+        double_chance: mk.double_chance || null,
+        prematch_xg: fd.prematch_xg || null,
+      };
+      if (mk.over_goals || mk.corners || mk.winner) fmap.set(mt.id, f);
+      const m = state.matches.get(mt.id);
+      if (!m) continue;
+      m.forecast = f;
+      if (mt.isLive && mt.scoreHome != null) { m.scoreHome = mt.scoreHome; m.scoreAway = mt.scoreAway; }
+      if (numOrNull(mt.minute)) { m.minute = mt.minute; m.time = mt.time || m.time; }
+    }
+  }
+  state.todayForecast = fmap;
+}
+
+/* ---------------- análise / pontuação ---------------- */
+function analyze(m) {
+  const ls = m.liveStats;
+  const res = {
+    valid: false, score: 0, components: {}, xgAvail: false, momAvail: false,
+    dir: null, dirStrength: 0, fire: false, ball: false, combo: false,
+    cornersAlert: false, momMag: 0, momTrend: null, superiority: null,
+    num: { xgH: null, xgA: null, corners: 0, shots: 0, sot: 0, dang: 0, possH: null },
+  };
+  if (!ls || !ls.stats) return res;
+
+  const st = ls.stats;
+  const ft = st.ft || st["2t"] || null;
+  if (!ft || !ft.home || !ft.away) return res;
+  const H = ft.home, A = ft.away;
+  const minute = Math.max(m.minute, 1);
+
+  const xgH = numOrNull(H.xg), xgA = numOrNull(A.xg);
+  const xgAvail = xgH != null && xgA != null && (xgH + xgA) > 0.02;
+  const corners = (numOrNull(H.corners) ?? 0) + (numOrNull(A.corners) ?? 0);
+  const sot = (numOrNull(H.on_target) ?? 0) + (numOrNull(A.on_target) ?? 0);
+  const shots = sot + (numOrNull(H.off_target) ?? 0) + (numOrNull(A.off_target) ?? 0);
+  const dang = (numOrNull(H.dangerous_attacks) ?? 0) + (numOrNull(A.dangerous_attacks) ?? 0);
+  const possH = numOrNull(H.possession);
+
+  res.num = { xgH, xgA, corners, shots, sot, dang, possH };
+  res.xgAvail = xgAvail;
+
+  /* ---- xG (30 pts) ---- */
+  let xgScore = 0;
+  if (xgAvail) {
+    const xgTot = xgH + xgA;
+    const pace = xgTot / Math.min(minute, 90);          // xG por minuto
+    const paceScore = clamp(pace / 0.035, 0, 1);        // 0.035/min ≈ 3.15 xG/90 = nível altíssimo
+    let growth = 0;
+    const t1 = st["1t"], t2 = st["2t"];
+    if (t1 && t2 && t1.home && t1.away && t2.home && t2.away) {
+      const prev = (numOrNull(t1.home.xg) ?? 0) + (numOrNull(t1.away.xg) ?? 0);
+      const cur = (numOrNull(t2.home.xg) ?? 0) + (numOrNull(t2.away.xg) ?? 0);
+      if (cur > prev + 0.1) growth = 3;                 // xG crescendo entre os tempos
+    }
+    xgScore = Math.min(30, 30 * paceScore + growth);
+  }
+
+  /* ---- Momentum (25 pts) ---- */
+  let momScore = 0, momAvail = false, momMag = 0, momDir = null;
+  const ind = ls.indicators || {};
+  if (ls.momentum && Array.isArray(ls.momentum.timeline) && ls.momentum.timeline.length) {
+    const tl = ls.momentum.timeline;
+    const win = tl.slice(-Math.min(MOM_WINDOW, tl.length));
+    momMag = Math.abs(mean(win.map(p => numOrNull(p.value) ?? 0)));
+    const persistence = win.filter(p => Math.abs(numOrNull(p.value) ?? 0) >= 20).length / win.length;
+    const meanVal = mean(win.map(p => numOrNull(p.value) ?? 0));
+    const stability = Math.abs(meanVal) / Math.max(momMag, 1e-6);   // direção consistente
+    let base = 0.55 * clamp(momMag / 40, 0, 1) + 0.25 * persistence + 0.20 * clamp(stability, 0, 1);
+    momScore = 25 * clamp(base, 0, 1);
+    if (ind.fire || ind.ball || ind.combo) momScore = Math.min(25, momScore + 3);
+    if (ind.momentum_trend) momScore = Math.min(25, momScore + 1);
+    momDir = Math.abs(meanVal) >= 4 ? (meanVal >= 0 ? "home" : "away") : null;
+    momAvail = true;
+  }
+  res.momAvail = momAvail;
+  res.momMag = round1(momMag);
+  res.momTrend = ind.momentum_trend || null;
+
+  /* ---- Escanteios (20 pts) ---- */
+  const cp = ls.corners_pressure;
+  let force = 0, consistency = 0, xc = 0, cpDiff = null;
+  if (cp && Array.isArray(cp.timeline) && cp.timeline.length) {
+    const last = cp.timeline[cp.timeline.length - 1];
+    force = Math.max(numOrNull(last.force_home) ?? 0, numOrNull(last.force_away) ?? 0);
+    consistency = Math.max(numOrNull(last.consistency_home) ?? 0, numOrNull(last.consistency_away) ?? 0);
+    xc = Math.max(Math.abs(numOrNull(last.xc_momentum_home) ?? 0), Math.abs(numOrNull(last.xc_momentum_away) ?? 0));
+    cpDiff = (numOrNull(last.force_home) ?? 0) - (numOrNull(last.force_away) ?? 0);
+  }
+  const cornersPace = corners / Math.min(minute, 90);
+  let cornersScore = 20 * clamp(
+    0.50 * clamp(force / 1.1, 0, 1) +
+    0.15 * clamp(cornersPace / 0.12, 0, 1) +
+    0.20 * clamp(consistency / 45, 0, 1) +
+    0.15 * clamp(xc / 0.8, 0, 1), 0, 1);
+  if (cp && (numOrNull(cp.home_above_threshold_minutes) ?? 0) + (numOrNull(cp.away_above_threshold_minutes) ?? 0) >= 3)
+    cornersScore = Math.min(20, cornersScore + 3);
+
+  /* ---- Chutes / chutes no alvo (15 pts) ---- */
+  const shotsPace = shots / Math.min(minute, 90);
+  const onTargetShare = shots > 0 ? (sot / shots) / 0.5 : 0;
+  const shotsScore = 15 * clamp(0.6 * clamp(shotsPace / 0.33, 0, 1) + 0.4 * clamp(onTargetShare, 0, 1), 0, 1);
+
+  /* ---- Ataques perigosos (10 pts) ---- */
+  const dangPace = dang / Math.min(minute, 90);
+  const dangScore = 10 * clamp(dangPace / 0.75, 0, 1);  // 0.75/min ≈ 67/90 = nível alto
+
+  /* ---- reequilíbrio quando algum indicador não está disponível ---- */
+  const parts = [
+    { key: "xg", w: 30, v: xgScore, avail: xgAvail, label: "xG" },
+    { key: "mom", w: 25, v: momScore, avail: momAvail, label: "Momentum" },
+    { key: "corners", w: 20, v: cornersScore, avail: true, label: "Escanteios" },
+    { key: "shots", w: 15, v: shotsScore, avail: true, label: "Chutes" },
+    { key: "dang", w: 10, v: dangScore, avail: true, label: "Ataq. perigosos" },
+  ];
+  const availParts = parts.filter(p => p.avail);
+  const totalW = availParts.reduce((a, p) => a + p.w, 0);
+  // fator de maturidade: partidas jovens têm ritmos por minuto instáveis → leve penalidade
+  const maturity = minute < 45 ? 0.7 + 0.3 * clamp(minute / 45, 0, 1) : 1;
+  // xG ausente = indicador-chave faltando → penalidade (dados insuficientes para nota cheia)
+  const xgFactor = xgAvail ? 1 : 0.88;
+  const comps = {};
+  for (const p of availParts) comps[p.key] = Math.round(p.v * (100 / totalW) * maturity * xgFactor);
+  const score = Math.round(availParts.reduce((a, p) => a + p.v * (100 / totalW), 0) * maturity * xgFactor);
+
+  /* ---- direção da pressão (para sugestão de mercado) ---- */
+  const sup = ls.superiority || null;
+  res.superiority = sup && numOrNull(sup.home) != null ? { home: numOrNull(sup.home), away: numOrNull(sup.away) } : null;
+  const dangDiff = (numOrNull(H.dangerous_attacks) ?? 0) - (numOrNull(A.dangerous_attacks) ?? 0);
+  const shotsDiff = (numOrNull(H.on_target) ?? 0) + (numOrNull(H.off_target) ?? 0) - (numOrNull(A.on_target) ?? 0) - (numOrNull(A.off_target) ?? 0);
+  const cornerDiff = (numOrNull(H.corners) ?? 0) - (numOrNull(A.corners) ?? 0);
+
+  let dSum = 0, dWeight = 0;
+  const signals = [
+    sup ? (sup.home - sup.away) / 100 * 2.0 : 0,        // -2..2
+    momDir ? (momDir === "home" ? 1.6 : -1.6) : 0,
+    cpDiff != null ? clamp(cpDiff / 0.8, -1.4, 1.4) : 0,
+    clamp(dangDiff / 20, -1.2, 1.2),
+    clamp(shotsDiff / 6, -1.0, 1.0),
+    clamp(cornerDiff / 4, -0.8, 0.8),
+  ];
+  for (const s of signals) { dSum += s; dWeight += Math.abs(s); }
+  const net = dWeight > 0 ? dSum / 4 : 0;               // normaliza para ~-1..1
+  const strength = clamp(Math.abs(net), 0, 1);
+  res.dir = strength >= 0.42 ? (net >= 0 ? "home" : "away") : null;
+  res.dirStrength = strength;
+  res.fire = !!ind.fire; res.ball = !!ind.ball; res.combo = !!ind.combo;
+  res.cornersAlert = !!ind.corners_alert;
+
+  res.components = comps;
+  res.score = score;
+  res.valid = score > 0 && score >= MIN_SCORE;
+  return res;
+}
+
+/* ---------------- sugestão de entrada ---------------- */
+function suggestEntry(m, sc) {
+  const out = [];
+  const f = m.forecast || {};
+  const over = f.over_goals || {};
+  const cornersExp = (f.corners && f.corners.match_total && numOrNull(f.corners.match_total.value)) ?? null;
+  const goals = m.scoreHome + m.scoreAway;
+  const minute = Math.max(m.minute, 1);
+  const dirTeam = sc.dir === "home" ? m.home : (sc.dir === "away" ? m.away : null);
+
+  const goalCands = [
+    { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1 },
+    { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2 },
+    { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3 },
+  ];
+  for (const c of goalCands) {
+    const o = over[c.key];
+    if (!c.still || !o) continue;
+    const prob = numOrNull(o.probability);
+    if (prob == null || prob < 60) continue;
+    out.push({
+      type: "goals", label: c.label,
+      odd: numOrNull(o.market_odd),
+      prob: prob,
+      prio: (prob >= 70 ? 4 : 2) + (numOrNull(o.market_odd) != null ? 1 : 0) + (prob >= 80 ? 1 : 0),
+    });
+  }
+
+  // escanteios: mercado aberto + pressão real de escanteio
+  if (m.hasCornersMarket && (sc.components.corners || 0) >= 60 && sc.dirStrength >= 0.5) {
+    let line = null;
+    if (cornersExp != null) {
+      line = Math.floor(cornersExp) + 0.5;
+      if ((m.scoreHome + m.scoreAway) > 0) line = Math.max(line, sc.num.corners + 0.5);
+      if (sc.num.corners >= line) line = sc.num.corners + 0.5;
+    }
+    out.push({
+      type: "corners",
+      label: line != null ? `Mais escanteios — Over ${fmt(line, 1)}` : "Mais escanteios",
+      odd: null, prob: null,
+      prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0),
+    });
+  }
+
+  // próximo gol: dominância clara + pressão (indicadores RoboBet Fire/Ball/Combo ou momentum alto)
+  if (dirTeam && sc.dirStrength >= 0.62 && (sc.fire || sc.ball || sc.combo || (sc.components.mom || 0) >= 68)) {
+    out.push({ type: "next_goal", label: `Próximo gol — ${dirTeam}`, odd: null, prob: null, prio: 3 });
+  }
+
+  out.sort((a, b) => b.prio - a.prio);
+  const primary = out[0] || null;
+  const strong = primary && (sc.score >= 85) && (primary.type !== "goals" || primary.prob >= 70);
+  return { entries: out.slice(0, 3), primary, strong, dirTeam, goals, cornersExp };
+}
+
+function buildReason(m, sc, sug) {
+  const bits = [];
+  const n = sc.num;
+  if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}`);
+  else bits.push("xG N/D");
+  bits.push(sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})`
+    : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado");
+  bits.push(pl(n.corners, "escanteio"));
+  bits.push(pl(n.shots, "chute") + ` (${n.sot} no alvo)`);
+  if (n.dang > 0) bits.push(pl(n.dang, "ataque perigoso", "ataques perigosos"));
+  if (sc.fire || sc.ball || sc.combo) bits.push(sc.fire && sc.ball ? "Fire+Ball ativos" : (sc.fire ? "Fire ativo" : (sc.ball ? "Ball ativo" : "Combo ativo")));
+  if (m.redH || m.redA) bits.push("cartão vermelho");
+  if (sug.cornersExp != null) bits.push(`escanteios esperados ${fmt(sug.cornersExp, 1)}`);
+  return bits.slice(0, 5).join(" + ") + ".";
+}
+
+/* ---------------- Telegram ---------------- */
+const tg = Object.assign({ enabled: false, token: "", chatId: "", fwdDetected: true, fwdLost: true }, loadLS("rb_tg", {}));
+let tgQueue = [], tgBusy = false;
+function saveTg() { saveLS("rb_tg", tg); }
+function tgStatus(msg, ok) { const el = $("tgStatus"); if (el) { el.textContent = msg; el.style.color = ok ? "#4ade80" : "#f87171"; } }
+
+/* Envia via Bot API direto do navegador (api.telegram.org aceita CORS). */
+async function tgSend(text) {
+  if (!tg.token || !tg.chatId) return { ok: false, err: "token/chat id vazio" };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${tg.token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: tg.chatId, text, disable_web_page_preview: true }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok !== true) return { ok: false, err: (j.description || ("HTTP " + r.status)) };
+    return { ok: true };
+  } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
+}
+
+/* fila serial com espaçamento de ~1.2s (limite da Bot API é ~1 msg/s) */
+function tgPush(text) { tgQueue.push(text); if (!tgBusy) tgDrain(); }
+async function tgDrain() {
+  tgBusy = true;
+  while (tgQueue.length) {
+    const text = tgQueue.shift();
+    const r = await tgSend(text);
+    tgStatus(r.ok ? "✓ Enviado " + new Date().toLocaleTimeString("pt-BR") : "✗ " + r.err, r.ok);
+    if (tgQueue.length) await new Promise(res => setTimeout(res, 1200));
+  }
+  tgBusy = false;
+}
+
+function tgAlertText(a, m, sc, sug) {
+  const lines = [];
+  if (a.t === "detected" && sc) {
+    lines.push("🚨 OPORTUNIDADE DETECTADA");
+    lines.push(`⚽ ${m.home} x ${m.away} (${m.league})`);
+    lines.push(`⏱ ${m.time || (m.minute + "'")} · Placar ${m.scoreHome} x ${m.scoreAway}`);
+    if (sc.xgAvail) lines.push(`📈 xG: ${fmt(sc.num.xgH)} x ${fmt(sc.num.xgA)}`);
+    lines.push(`⚡ Momentum: ${sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : (sc.momMag >= 14 ? "jogo aberto" : "equilibrado")}`);
+    lines.push(`🚩 Escanteios: ${sc.num.corners}`);
+    lines.push(`🎯 Chutes no alvo: ${sc.num.sot}/${sc.num.shots}`);
+    if (sc.num.dang > 0) lines.push(`💥 Ataques perigosos: ${sc.num.dang}`);
+    lines.push(`🔥 Score: ${sc.score}/100`);
+    if (sug && sug.primary) {
+      lines.push(`🟢 Entrada: ${sug.primary.label}` +
+        (sug.primary.odd != null ? ` @ ${fmt(sug.primary.odd)}` : "") +
+        (sug.primary.prob != null ? ` (prob. ${Math.round(sug.primary.prob)}%)` : ""));
+    }
+    if (m._reason) lines.push(`ℹ️ ${m._reason}`);
+  } else {
+    lines.push("🚨 OPORTUNIDADE PERDEU FORÇA");
+    lines.push(`⚽ ${m ? (m.home + " x " + m.away) : ""}`);
+    lines.push(a.body);
+  }
+  return lines.join("\n");
+}
+
+function maybeTg(a, m, sc, sug) {
+  if (!tg.enabled) return;
+  if (a.t === "detected" && !tg.fwdDetected) return;
+  if (a.t === "lost" && !tg.fwdLost) return;
+  tgPush(tgAlertText(a, m, sc, sug));
+}
+
+function syncTgUI() {
+  $("tgToken").value = tg.token; $("tgChat").value = tg.chatId;
+  $("tgDet").checked = tg.fwdDetected; $("tgLost").checked = tg.fwdLost;
+  $("tgToggle").textContent = tg.enabled ? "Desativar" : "Ativar";
+  $("tgToggle").style.background = tg.enabled ? "#7f1d1d" : "#14532d";
+}
+$("tgToken").addEventListener("input", e => { tg.token = e.target.value.trim(); saveTg(); });
+$("tgChat").addEventListener("input", e => { tg.chatId = e.target.value.trim(); saveTg(); });
+$("tgDet").addEventListener("change", e => { tg.fwdDetected = e.target.checked; saveTg(); });
+$("tgLost").addEventListener("change", e => { tg.fwdLost = e.target.checked; saveTg(); });
+$("tgToggle").addEventListener("click", () => {
+  tg.enabled = !tg.enabled; saveTg(); syncTgUI();
+  tgStatus(tg.enabled ? "Telegram ativado ✓" : "Telegram desativado", true);
+});
+$("tgTest").addEventListener("click", async () => {
+  if (!tg.token || !tg.chatId) { tgStatus("Preencha token e chat id antes do teste."); return; }
+  tgStatus("Enviando teste…");
+  const r = await tgSend("✅ Scanner AO VIVO RoboBet conectado ao Telegram.\nAlertas de oportunidade serão enviados para este chat.");
+  tgStatus(r.ok ? "✓ Teste enviado!" : "✗ " + r.err, r.ok);
+});
+$("tgOpen").addEventListener("click", () => {
+  const p = $("tgPanel");
+  p.style.display = p.style.display === "none" ? "block" : "none";
+  if (p.style.display === "block") syncTgUI();
+});
+
+/* ---------------- alertas ---------------- */
+function maybeAlerts() {
+  const now = Date.now();
+  for (const m of state.matches.values()) {
+    const sc = m._sc;
+    if (!sc || !sc.valid) continue;
+    const prev = state.prevScores.get(m.id);
+    const score = sc.score;
+    if (!prev || prev.score < MIN_SCORE) {
+      if (prev && prev.present === false) continue; // já avisado que saiu
+      const sug = m._sug;
+      const alert = {
+        t: "detected", at: now,
+        title: `OPORTUNIDADE DETECTADA — ${m.home} x ${m.away}`,
+        body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · xG ${sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : "N/D"} · Momentum ${sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : "equilibrado"} · ${pl(sc.num.corners, "escanteio")} · ${pl(sc.num.sot, "chute no alvo")} · Score ${score}/100` +
+          (sug && sug.primary ? ` → 🟢 ${sug.primary.label}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}` : ""),
+      };
+      if (!state.alerts.some(a => a.t === "detected" && a.title === alert.title && Math.abs(a.at - now) < 3 * 60_000)) {
+        state.alerts.unshift(alert);
+        maybeTg(alert, m, sc, sug);
+      }
+    } else if (score < prev.score - 10) {
+      const dup = state.alerts.some(a => a.t === "lost" && a.title === `OPORTUNIDADE PERDEU FORÇA — ${m.home} x ${m.away}` && Math.abs(a.at - now) < 5 * 60_000);
+      if (!dup) {
+        state.alerts.unshift({
+          t: "lost", at: now,
+          title: `OPORTUNIDADE PERDEU FORÇA — ${m.home} x ${m.away}`,
+          body: `Score caiu de ${prev.score}/100 para ${score}/100 (${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}).`,
+        });
+        maybeTg({ t: "lost", at: now, title: "", body: `Score caiu de ${prev.score}/100 para ${score}/100 (${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}).` }, m, null, null);
+      }
+    }
+  }
+  // força perdida: caiu abaixo do filtro
+  for (const [id, prev] of state.prevScores) {
+    if (prev.score >= MIN_SCORE && prev.present) {
+      const m = state.matches.get(id);
+      const cur = m && m._sc;
+      if (!cur || !cur.valid || !cur.score || cur.score < MIN_SCORE) {
+        state.alerts.unshift({
+          t: "lost", at: now,
+          title: `OPORTUNIDADE PERDEU FORÇA — ${(m && (m.home + " x " + m.away)) || id}`,
+          body: `O jogo saiu da lista de oportunidades (score ${prev.score}/100 → abaixo de ${MIN_SCORE}).`,
+        });
+        maybeTg({ t: "lost", at: now, title: "", body: `O jogo saiu da lista de oportunidades (score ${prev.score}/100 → abaixo de ${MIN_SCORE}).` }, m, null, null);
+      }
+    }
+  }
+  state.alerts = state.alerts.slice(0, ALERT_LIMIT);
+  for (const m of state.matches.values()) state.prevScores.set(m.id, { score: m._sc ? m._sc.score : 0, present: !!(m._sc && m._sc.valid), tracked: !!(m._sc && m._sc.valid) });
+}
+
+/* ---------------- histórico ---------------- */
+function ensureEntry(m, sc, sug) {
+  if (!sug.primary) return;
+  const hour = new Date().toISOString().slice(0, 13);
+  const exists = state.history.some(h => h.match === (m.home + " x " + m.away) && h.market === sug.primary.label && h.ts.slice(0, 13) === hour);
+  if (exists) return;
+  state.history.unshift({
+    ts: new Date().toISOString(),
+    match: m.home + " x " + m.away,
+    minute: m.time || (m.minute + "'"),
+    market: sug.primary.label,
+    odd: sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D",
+    score: sc.score,
+    result: null,
+  });
+}
+function resolveFinished(m) {
+  const fs = state.finishedScores[m.id];
+  const finals = fs ? { h: fs.h, a: fs.a } : { h: m.scoreHome, a: m.scoreAway };
+  const total = (finals.h ?? 0) + (finals.a ?? 0);
+  let any = false;
+  for (const h of state.history) {
+    if (h.result || h.match !== (m.home + " x " + m.away)) continue;
+    any = true;
+    if (h.market.startsWith("Over 0.5")) h.result = total >= 1 ? "green" : "red";
+    else if (h.market.startsWith("Over 1.5")) h.result = total >= 2 ? "green" : "red";
+    else if (h.market.startsWith("Over 2.5")) h.result = total >= 3 ? "green" : "red";
+    else h.result = "na"; // próximo gol / escanteios: RoboBet não expõe a ordem dos eventos finais
+  }
+  if (any) save();
+}
+
+/* ---------------- render ---------------- */
+function renderAll() {
+  const matches = Array.from(state.matches.values());
+  for (const m of matches) {
+    if (m.minute >= MIN_MINUTE) {
+      m._sc = analyze(m);
+      m._sug = m._sc.valid ? suggestEntry(m, m._sc) : null;
+      m._reason = m._sug ? buildReason(m, m._sc, m._sug) : null;
+      if (m._sug) ensureEntry(m, m._sc, m._sug);
+    } else { m._sc = null; m._sug = null; }
+  }
+
+  const opps = matches.filter(m => m._sc && m._sc.valid).sort((a, b) => b._sc.score - a._sc.score || b.minute - a.minute);
+  const live = matches.filter(m => m.time !== "FT" && m.period !== "FT");
+
+  $("hud-live").textContent = String(live.length);
+  $("hud-updated").textContent = new Date().toLocaleTimeString("pt-BR");
+
+  renderAlerts();
+  renderRanking(opps);
+  renderCards(opps);
+  renderMonitor(matches);
+  renderHistory();
+
+  save();
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+function renderAlerts() {
+  const sec = $("alerts-sec");
+  const box = $("alerts");
+  if (!state.alerts.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  box.innerHTML = state.alerts.slice(0, 8).map(a => `
+    <div class="alert ${a.t === "detected" ? "detected" : "lost"}">
+      <span class="when">${new Date(a.at).toLocaleTimeString("pt-BR")}</span>
+      <div class="ttl">${a.t === "detected" ? "🚨 OPORTUNIDADE DETECTADA" : "🚨 OPORTUNIDADE PERDEU FORÇA"}</div>
+      <div class="det"><b>${esc(a.title)}</b><br>${esc(a.body)}</div>
+    </div>`).join("");
+}
+
+function renderRanking(opps) {
+  const box = $("ranking");
+  if (!opps.length) {
+    box.innerHTML = `<div class="empty"><b>Nenhuma oportunidade forte encontrada neste momento.</b><br><br>` +
+      `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com dados suficientes na RoboBet.<br>` +
+      `O modelo não força entrada — os dados são atualizados automaticamente.</span></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="tbl-wrap"><table><thead><tr>
+    <th>#</th><th>Jogo</th><th>Min</th><th>Placar</th><th>Score</th><th>xG</th><th>Momentum</th><th>Escanteios</th><th>Entrada</th>
+  </tr></thead><tbody>` + opps.map((m, i) => {
+    const sc = m._sc, sug = m._sug;
+    const pill = sc.score >= 80 ? "s80" : "s70";
+    return `<tr>
+      <td>${i + 1}️⃣</td>
+      <td><div class="teams">${esc(m.home)} x ${esc(m.away)}</div><div class="lg">${esc(m.league)}</div></td>
+      <td>${esc(m.time || (m.minute + "'"))}</td>
+      <td>${m.scoreHome} x ${m.scoreAway}</td>
+      <td><span class="score-pill ${pill}">${sc.score}/100</span></td>
+      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
+      <td>${momText(m, sc)}</td>
+      <td>${sc.num.corners}</td>
+      <td>${sug && sug.primary ? `<span class="entry-tag ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span>` : '<span class="nd">—</span>'}</td>
+    </tr>`;
+  }).join("") + "</tbody></table></div>";
+}
+
+function momText(m, sc) {
+  if (!sc.momAvail) return '<span class="nd">N/D</span>';
+  const team = sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : null;
+  const fire = sc.momMag >= 25 ? "🔥🔥🔥" : sc.momMag >= 14 ? "🔥🔥" : "🔥";
+  if (!team) return sc.momMag >= 14
+    ? `<span class="fire">jogo aberto ${fire}</span>`
+    : `<span class="nd">equilibrado ${fire}</span>`;
+  return `${esc(team)} <span class="fire">${fire}</span>`;
+}
+
+function sparkline(m) {
+  const ls = m.liveStats;
+  if (!ls || !ls.momentum || !Array.isArray(ls.momentum.moving_average) || ls.momentum.moving_average.length < 3) return "";
+  const pts = ls.momentum.moving_average.slice(-30);
+  const vals = pts.map(p => numOrNull(p.value) ?? 0);
+  const mx = Math.max(...vals.map(Math.abs), 5);
+  const W = 300, H = 34, pad = 4;
+  const x = (i) => pad + (i / (vals.length - 1)) * (W - pad * 2);
+  const y = (v) => H / 2 - (v / mx) * (H / 2 - pad);
+  const line = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const mid = H / 2;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#1f2937" stroke-width="1"/>
+    <polyline points="${line}" fill="none" stroke="#3b82f6" stroke-width="1.8"/>
+  </svg>`;
+}
+
+function renderCards(opps) {
+  const sec = $("cards-sec"), box = $("cards");
+  if (!opps.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  box.innerHTML = opps.map((m, i) => {
+    const sc = m._sc, sug = m._sug;
+    const conf = sc.score >= 85 ? `<span class="conf high">Confiança: Alta</span>` : `<span class="conf mid">Confiança: Média</span>`;
+    const strength = sug && sug.strong ? `<span class="strong">🟢 ENTRADA FORTE</span>` : `<span class="interest">🟡 ENTRADA INTERESSANTE</span>`;
+    const alts = sug ? sug.entries.slice(1) : [];
+    const c = sc.components;
+    return `<div class="card">
+      <div class="top"><div>
+        <div class="leag">${esc(m.league)}</div>
+        <div class="vs">${esc(m.home)} x ${esc(m.away)}</div>
+      </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
+      <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))} · Placar: ${m.scoreHome} x ${m.scoreAway}${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
+      <div class="stats">
+        <div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</span></div>
+        <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}</span></div>
+        <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
+        <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
+        <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
+        <div class="row"><span class="k">🧭 Posse</span><span class="v">${sc.num.possH != null ? sc.num.possH + "% x " + (100 - sc.num.possH) + "%" : '<span class="nd">N/D</span>'}</span></div>
+        <div class="row"><span class="k">⚽ Indicador RoboBet</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
+      </div>
+      ${sparkline(m)}
+      ${sug && !sug.primary ? `<div class="entry"><div class="lab">Possível entrada</div><div class="mk"><span class="interest">Nenhum mercado com linha/odd favorável agora — monitorando.</span></div></div>` : ""}
+      ${sug && sug.primary ? `<div class="entry">
+        <div class="lab">Possível entrada · ${strength}</div>
+        <div class="mk">🟢 ${esc(sug.primary.label)}</div>
+        <div class="odds">Odd atual: <b>${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}</b>${sug.primary.prob != null ? ` · Prob. modelo RoboBet: <b>${Math.round(sug.primary.prob)}%</b>` : ""} ${conf}</div>
+        ${alts.length ? `<div class="odds" style="margin-top:3px">Alternativas: ${alts.map(a => esc(a.label)).join(" · ")}</div>` : ""}
+      </div>` : ""}
+      ${m._reason ? `<div class="why"><b>Motivo:</b> ${esc(m._reason)}</div>` : ""}
+      <div class="why" style="margin-top:4px;font-size:11px;color:var(--dim)">${c.xg != null ? `xG ${c.xg}/100 · ` : ""}${c.mom != null ? `Momentum ${c.mom}/100 · ` : ""}Esc ${c.corners}/100 · Chutes ${c.shots}/100 · Ataq. ${c.dang}/100</div>
+    </div>`;
+  }).join("");
+}
+
+function renderMonitor(matches) {
+  const tb = $("monitor").querySelector("tbody");
+  const sorted = matches.slice().sort((a, b) => ((b._sc && b._sc.score) || 0) - ((a._sc && a._sc.score) || 0));
+  $("monitor-summary").textContent = `Mostrar todos os jogos ao vivo monitorados (${sorted.length})`;
+  tb.innerHTML = sorted.map(m => {
+    const sc = m._sc;
+    if (!sc) return `<tr><td colspan="10"><div class="teams">${esc(m.home)} x ${esc(m.away)}</div><div class="lg">${esc(m.league)} · ${esc(m.time || (m.minute + "'"))} · ${m.scoreHome} x ${m.scoreAway} — dados insuficientes (live-stats indisponível)</div></td></tr>`;
+    const pill = sc.score >= 80 ? "s80" : sc.score >= 70 ? "s70" : "";
+    return `<tr>
+      <td><div class="teams">${esc(m.home)} x ${esc(m.away)}</div><div class="lg">${esc(m.league)}</div></td>
+      <td>${esc(m.league)}</td>
+      <td>${esc(m.time || (m.minute + "'"))}</td>
+      <td>${m.scoreHome} x ${m.scoreAway}</td>
+      <td>${sc.score >= 70 ? `<span class="score-pill ${pill}">${sc.score}/100</span>` : `<span class="nd">${sc.score}/100</span>`}</td>
+      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
+      <td>${momText(m, sc)}</td>
+      <td>${sc.num.corners}</td>
+      <td>${sc.num.shots} (${sc.num.sot})</td>
+      <td>${sc.num.dang || '<span class="nd">N/D</span>'}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderHistory() {
+  const sec = $("hist-sec");
+  if (!state.history.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  const tb = $("hist").querySelector("tbody");
+  tb.innerHTML = state.history.slice(0, 60).map(h => {
+    const r = h.result == null ? '<span class="hres na">em aberto</span>'
+      : h.result === "green" ? '<span class="hres green">🟢 GREEN</span>'
+      : h.result === "red" ? '<span class="hres red">🔴 RED</span>'
+      : '<span class="hres na">— não verificável</span>';
+    return `<tr>
+      <td>${new Date(h.ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+      <td class="teams">${esc(h.match)}</td>
+      <td>${esc(h.minute)}</td>
+      <td>${esc(h.market)}</td>
+      <td>${esc(h.odd)}</td>
+      <td>${h.score}/100</td>
+      <td>${r}</td>
+    </tr>`;
+  }).join("");
+}
+
+/* ---------------- loop ---------------- */
+function scheduleNext() {
+  clearTimeout(state.timer);
+  if (state.paused) { $("hud-next").textContent = "pausado"; return; }
+  state.nextAt = Date.now() + state.intervalMs;
+  $("hud-next").textContent = new Date(state.nextAt).toLocaleTimeString("pt-BR");
+  state.timer = setTimeout(() => { $("hud-next").textContent = "atualizando…"; tick(); }, state.intervalMs);
+}
+
+$("interval").addEventListener("change", (e) => {
+  state.intervalMs = Number(e.target.value) * 1000;
+  scheduleNext();
+});
+$("pause").addEventListener("click", () => {
+  state.paused = !state.paused;
+  $("pause").textContent = state.paused ? "▶ Retomar" : "⏸ Pausar";
+  if (!state.paused) tick(); else scheduleNext();
+});
+$("refresh").addEventListener("click", () => { $("hud-next").textContent = "atualizando…"; tick(); });
+
+/* debug (útil para testes) */
+window.__rb = { state, analyze, suggestEntry, buildReason, tg: { tgPush, tgSend, get tg() { return tg; } } };
+syncTgUI();
+
+/* primeira carga */
+tick();
+</script>
+</body>
+</html>
