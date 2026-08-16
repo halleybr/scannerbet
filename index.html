@@ -239,10 +239,10 @@
 
   <footer>
     <p><b>Como o modelo funciona:</b> intensidade de 0 a 100 = xG (30 pts) + Momentum (25 pts) + Escanteios (20 pts) + Chutes/Chutes no alvo (15 pts) + Ataques perigosos (10 pts).
-    Quando um indicador não está disponível na RoboBet (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente entre os indicadores disponíveis — nenhum número é inventado.
+    Quando um indicador não está disponível na fonte de dados (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente entre os indicadores disponíveis — nenhum número é inventado.
     Somente partidas com <b>≥ 70/100</b> e dados suficientes entram na lista de oportunidades.</p>
-    <p style="margin-top:6px">⚠️ Scanner de oportunidades — os dados vêm em tempo real da RoboBet.app e podem conter atraso. Isto <b>não</b> é recomendação de aposta e nada é garantido.</p>
-    <p style="margin-top:10px;font-size:11px">Build <b id="build"></b> · a página é estática — os dados ao vivo vêm direto da API da RoboBet a cada ciclo, nada é gravado no GitHub Pages. Se o número do build aqui não mudar após um push, é cache do navegador (recarregue com Ctrl+Shift+R).</p>
+    <p style="margin-top:6px">⚠️ Scanner de oportunidades — os dados vêm em tempo real e podem conter atraso. Isto <b>não</b> é recomendação de aposta e nada é garantido.</p>
+    <p style="margin-top:10px;font-size:11px">Build <b id="build"></b> · a página é estática — os dados ao vivo vêm direto da API a cada ciclo, nada é gravado no GitHub Pages. Se o número do build aqui não mudar após um push, é cache do navegador (recarregue com Ctrl+Shift+R).</p>
   </footer>
 </div>
 
@@ -258,7 +258,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-15T23:30-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-15T21:24-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -385,7 +385,7 @@ async function tick() {
     $("errbox").style.display = "none";
   } catch (err) {
     state.lastError = String(err && err.message || err);
-    $("errbox").textContent = "⚠️ Não foi possível atualizar os dados da RoboBet (" + state.lastError +
+    $("errbox").textContent = "⚠️ Não foi possível atualizar os dados ao vivo (" + state.lastError +
       "). Mantendo os últimos dados válidos na tela — nova tentativa em instantes.";
     $("errbox").style.display = "block";
   } finally {
@@ -720,7 +720,7 @@ $("tgToggle").addEventListener("click", () => {
 $("tgTest").addEventListener("click", async () => {
   if (!tg.token || !tg.chatId) { tgStatus("Preencha token e chat id antes do teste."); return; }
   tgStatus("Enviando teste…");
-  const r = await tgSend("✅ Scanner AO VIVO RoboBet conectado ao Telegram.\nAlertas de oportunidade serão enviados para este chat.");
+  const r = await tgSend("✅ ScannerGreen conectado ao Telegram.\nAlertas de oportunidade serão enviados para este chat.");
   tgStatus(r.ok ? "✓ Teste enviado!" : "✗ " + r.err, r.ok);
 });
 $("tgOpen").addEventListener("click", () => {
@@ -873,7 +873,7 @@ function renderRanking(opps) {
   }
   if (!opps.length) {
     box.innerHTML = `<div class="empty"><b>Nenhuma oportunidade forte encontrada neste momento.</b><br><br>` +
-      `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com dados suficientes na RoboBet.<br>` +
+      `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com dados suficientes na fonte de dados.<br>` +
       `O modelo não força entrada — os dados são atualizados automaticamente.</span></div>`;
     return;
   }
@@ -970,14 +970,14 @@ function renderCards(opps) {
         <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
         <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">🧭 Posse</span><span class="v">${sc.num.possH != null ? sc.num.possH + "% x " + (100 - sc.num.possH) + "%" : '<span class="nd">N/D</span>'}</span></div>
-        <div class="row"><span class="k">⚽ Indicador RoboBet</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
+        <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
       </div>
       ${sparkline(m)}
       ${sug && !sug.primary ? `<div class="entry"><div class="lab">Possível entrada</div><div class="mk"><span class="interest">Nenhum mercado com linha/odd favorável agora — monitorando.</span></div></div>` : ""}
       ${sug && sug.primary ? `<div class="entry">
         <div class="lab">Possível entrada · ${strength}</div>
         <div class="mk">🟢 ${esc(sug.primary.label)}</div>
-        <div class="odds">Odd atual: <b>${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}</b>${sug.primary.prob != null ? ` · Prob. modelo RoboBet: <b>${Math.round(sug.primary.prob)}%</b>` : ""} ${conf}</div>
+        <div class="odds">Odd atual: <b>${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}</b>${sug.primary.prob != null ? ` · Prob. do modelo: <b>${Math.round(sug.primary.prob)}%</b>` : ""} ${conf}</div>
         ${alts.length ? `<div class="odds" style="margin-top:3px">Alternativas: ${alts.map(a => esc(a.label)).join(" · ")}</div>` : ""}
       </div>` : ""}
       ${m._reason ? `<div class="why"><b>Motivo:</b> ${esc(m._reason)}</div>` : ""}
