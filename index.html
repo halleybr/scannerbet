@@ -8,8 +8,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>🔥 Scanner AO VIVO — RoboBet</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+<title>⚽ ScannerGreen — Scanner de oportunidades ao vivo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><circle cx=%2212%22 cy=%2212%22 r=%2210.6%22 fill=%22%23e8f5e9%22 stroke=%22%2322c55e%22 stroke-width=%221.7%22/><polygon points=%2212,7.6 14.7,9.6 13.7,12.9 10.3,12.9 9.3,9.6%22 fill=%22none%22 stroke=%22%2322c55e%22 stroke-width=%221.2%22/><path d=%22M12 7.6 L12 2.2 M14.7 9.6 L19.4 6.6 M13.7 12.9 L18.2 15.8 M10.3 12.9 L5.8 15.8 M9.3 9.6 L4.6 6.6%22 stroke=%22%2322c55e%22 stroke-width=%221.2%22 fill=%22none%22/></svg>">
 <style>
   :root{
     --bg:#0b0f19; --panel:#111827; --panel2:#0f172a; --line:#1f2937;
@@ -24,7 +24,9 @@
   header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
     padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
   h1{font-size:20px;font-weight:700;letter-spacing:.3px}
-  h1 .live{color:var(--red)}
+  h1 .live{color:var(--green)}
+  h1 .logo{display:inline-block;margin-right:8px}
+  h1 .logo svg{display:block}
   h1 small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
   .hud{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
   .chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
@@ -39,16 +41,46 @@
   section{margin-bottom:22px}
   h2{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
   h2 .n{color:var(--dim);font-weight:600;font-size:12px}
-  /* alerts */
-  .alerts{display:flex;flex-direction:column;gap:8px}
-  .alert{border-radius:10px;padding:10px 14px;font-size:13px;border:1px solid var(--line)}
-  .alert.detected{background:#052e16;border-color:#14532d}
-  .alert.lost{background:#450a0a;border-color:#7f1d1d}
-  .alert .ttl{font-weight:700;font-size:12px;letter-spacing:.4px}
-  .alert.detected .ttl{color:var(--green)} .alert.lost .ttl{color:var(--red)}
-  .alert .when{float:right;color:var(--dim);font-size:11px}
-  .alert .det{color:var(--muted);font-size:12.5px;margin-top:2px}
-  .alert .det b{color:var(--text)}
+  /* layout principal: melhores jogos em destaque + alertas ao lado */
+  .main-grid{display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start}
+  @media (max-width: 960px){ .main-grid{grid-template-columns:1fr} }
+  h2.destaque{font-size:18px;padding:12px 16px;border:1px solid rgba(239,68,68,.45);border-radius:12px;
+    background:linear-gradient(90deg,rgba(239,68,68,.15),rgba(239,68,68,.04) 55%,transparent);
+    box-shadow:0 0 22px rgba(239,68,68,.14);gap:10px}
+  h2.destaque .n{color:#fca5a5}
+  .hot{display:inline-flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;font-weight:800;
+    color:#fff;background:#7f1d1d;border:1px solid rgba(239,68,68,.7);border-radius:999px;padding:4px 12px;
+    letter-spacing:.3px;white-space:nowrap;animation:pulseGlow 1.5s ease-in-out infinite}
+  .hot::before{content:"";width:8px;height:8px;border-radius:50%;background:#f87171;
+    animation:blinkDot 1.5s ease-in-out infinite}
+  @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 10px rgba(239,68,68,0)}}
+  @keyframes blinkDot{0%,100%{opacity:1}50%{opacity:.35}}
+  /* alerts (tabela fina ao lado) */
+  .alerts-tbl{width:100%;border-collapse:collapse;font-size:11.5px;min-width:0;
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .alerts-tbl td{padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  .alerts-tbl tr:last-child td{border-bottom:none}
+  .alerts-tbl tr.detected td{background:rgba(34,197,94,.05)}
+  .alerts-tbl tr.lost td{background:rgba(239,68,68,.05)}
+  .alerts-tbl .a-time{color:var(--dim);font-size:10.5px;white-space:nowrap;padding-top:9px}
+  .alerts-tbl .a-tag{font-weight:700;font-size:10.5px;letter-spacing:.4px;white-space:nowrap}
+  .alerts-tbl .a-tag.detected{color:var(--green)}
+  .alerts-tbl .a-tag.lost{color:var(--red)}
+  .alerts-tbl .a-title{color:var(--text);font-weight:600;margin-top:3px}
+  .alerts-tbl .a-body{color:var(--muted);margin-top:2px;line-height:1.45}
+  .alerts-tbl .a-body b{color:var(--text)}
+  /* oportunidades 85+ (tabelas compactas em 3-4 colunas) */
+  #opps85-sec{margin-bottom:20px}
+  .opps85-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  table.opp85{width:100%;border-collapse:collapse;font-size:11.5px;min-width:0;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .opp85 td{padding:5px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  .opp85 tr:last-child td{border-bottom:none}
+  .opp85 tr.h td{background:rgba(34,197,94,.12);color:#4ade80;font-weight:800;font-size:12px;letter-spacing:.3px}
+  .opp85 .pill{float:right;font-weight:800;color:#fff;background:rgba(34,197,94,.25);
+    border:1px solid rgba(34,197,94,.5);border-radius:6px;padding:0 6px;font-size:11px}
+  .opp85 .k{color:var(--dim);white-space:nowrap;width:74px;font-size:11px}
+  .opp85 .lg{color:var(--dim);font-size:10.5px;display:block}
   /* ranking table */
   .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
   table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
@@ -123,8 +155,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><span class="live">🔴 SCANNER AO VIVO</span> — ROBÔBET
-      <small>Fonte de dados: <a href="https://robobet.app" target="_blank" rel="noopener">RoboBet.app</a> · gráficos ao vivo (xG, momentum, escanteios, chutes)</small>
+    <h1><span class="logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10.6" fill="#e8f5e9" stroke="#22c55e" stroke-width="1.7"/><polygon points="12,7.6 14.7,9.6 13.7,12.9 10.3,12.9 9.3,9.6" fill="none" stroke="#22c55e" stroke-width="1.2"/><path d="M12 7.6 L12 2.2 M14.7 9.6 L19.4 6.6 M13.7 12.9 L18.2 15.8 M10.3 12.9 L5.8 15.8 M9.3 9.6 L4.6 6.6" stroke="#22c55e" stroke-width="1.2" fill="none"/></svg></span><span class="live">ScannerGreen</span>
+      <small>gráficos ao vivo (xG, momentum, escanteios, chutes)</small>
     </h1>
     <div class="hud">
       <span class="chip">Jogos vivos: <b class="red" id="hud-live">–</b></span>
@@ -165,15 +197,23 @@
 
   <div class="err" id="errbox"></div>
 
-  <section id="alerts-sec" style="display:none">
-    <h2>🚨 ALERTAS <span class="n">oportunidades detectadas / perderam força</span></h2>
-    <div class="alerts" id="alerts"></div>
-  </section>
+  <div class="main-grid">
+    <section>
+      <div id="opps85-sec" style="display:none">
+        <h2>💪 OPORTUNIDADES 85+</h2>
+        <div class="opps85-grid" id="opps85"></div>
+      </div>
 
-  <section>
-    <h2>🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100</span></h2>
-    <div id="ranking"></div>
-  </section>
+      <h2 class="destaque">🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100</span>
+        <span class="hot" id="hot-badge" style="display:none"></span></h2>
+      <div id="ranking"></div>
+    </section>
+
+    <aside id="alerts-sec" style="display:none">
+      <h2>🚨 ALERTAS <span class="n">detectadas / perderam força</span></h2>
+      <table class="alerts-tbl"><tbody id="alerts"></tbody></table>
+    </aside>
+  </div>
 
   <section id="cards-sec" style="display:none">
     <h2>📋 DETALHES DAS OPORTUNIDADES</h2>
@@ -209,7 +249,7 @@
 <script>
 "use strict";
 /* ============================================================
-   SCANNER AO VIVO — ROBÔBET
+   SCANNERGREEN — SCANNER AO VIVO
    Fonte exclusiva de dados: RoboBet.app (m.robobet.app/api)
    - GET /inplay/list.json        → jogos ao vivo (times, placar, minuto, odd 1x2, mercados abertos)
    - GET /events/{id}/live-stats  → estatísticas ao vivo + momentum + pressão de escanteio + indicadores
@@ -793,6 +833,7 @@ function renderAll() {
 
   renderAlerts();
   renderRanking(opps);
+  renderOpps85();
   renderCards(opps);
   renderMonitor(matches);
   renderHistory();
@@ -807,16 +848,29 @@ function renderAlerts() {
   const box = $("alerts");
   if (!state.alerts.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
-  box.innerHTML = state.alerts.slice(0, 8).map(a => `
-    <div class="alert ${a.t === "detected" ? "detected" : "lost"}">
-      <span class="when">${new Date(a.at).toLocaleTimeString("pt-BR")}</span>
-      <div class="ttl">${a.t === "detected" ? "🚨 OPORTUNIDADE DETECTADA" : "🚨 OPORTUNIDADE PERDEU FORÇA"}</div>
-      <div class="det"><b>${esc(a.title)}</b><br>${esc(a.body)}</div>
-    </div>`).join("");
+  box.innerHTML = state.alerts.slice(0, 12).map(a => {
+    const t = a.t === "detected";
+    return `<tr class="${a.t}">
+      <td class="a-time">${new Date(a.at).toLocaleTimeString("pt-BR")}</td>
+      <td>
+        <div class="a-tag ${a.t}">${t ? "🚨 DETECTADA" : "🚨 PERDEU FORÇA"}</div>
+        <div class="a-title">${esc(a.title)}</div>
+        <div class="a-body">${esc(a.body)}</div>
+      </td>
+    </tr>`;
+  }).join("");
 }
 
 function renderRanking(opps) {
   const box = $("ranking");
+  const hot = opps.filter(m => m._sc.score >= 85).length;
+  const badge = $("hot-badge");
+  if (hot) {
+    badge.textContent = hot + " " + (hot === 1 ? "oportunidade" : "oportunidades") + " 85+";
+    badge.style.display = "inline-flex";
+  } else {
+    badge.style.display = "none";
+  }
   if (!opps.length) {
     box.innerHTML = `<div class="empty"><b>Nenhuma oportunidade forte encontrada neste momento.</b><br><br>` +
       `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com dados suficientes na RoboBet.<br>` +
@@ -867,6 +921,30 @@ function sparkline(m) {
     <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#1f2937" stroke-width="1"/>
     <polyline points="${line}" fill="none" stroke="#3b82f6" stroke-width="1.8"/>
   </svg>`;
+}
+
+function renderOpps85() {
+  const sec = $("opps85-sec");
+  const grid = $("opps85");
+  const opps = Array.from(state.matches.values())
+    .filter(m => m._sc && m._sc.valid && m._sc.score >= 85)
+    .sort((a, b) => b._sc.score - a._sc.score || b.minute - a.minute);
+  if (!opps.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  grid.innerHTML = opps.map(m => {
+    const sc = m._sc, sug = m._sug;
+    const entry = sug && sug.primary
+      ? `🟢 ${esc(sug.primary.label)}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}`
+      : '<span class="nd">— monitorando —</span>';
+    return `<table class="opp85"><tbody>
+      <tr class="h"><td colspan="2">🔥 ENTRADA FORTE <span class="pill">${sc.score}/100</span></td></tr>
+      <tr><td class="k">Jogo</td><td><b>${esc(m.home)} x ${esc(m.away)}</b><span class="lg">${esc(m.league)}</span></td></tr>
+      <tr><td class="k">⏱ Min</td><td>${esc(m.time || (m.minute + "'"))} · ${m.scoreHome} x ${m.scoreAway}</td></tr>
+      <tr><td class="k">📈 xG</td><td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td></tr>
+      <tr><td class="k">⚡ Mom.</td><td>${momText(m, sc)}</td></tr>
+      <tr><td class="k">🟢 Entrada</td><td>${entry}</td></tr>
+    </tbody></table>`;
+  }).join("");
 }
 
 function renderCards(opps) {
