@@ -207,6 +207,11 @@
       <h2 class="destaque">🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100</span>
         <span class="hot" id="hot-badge" style="display:none"></span></h2>
       <div id="ranking"></div>
+
+      <section id="cards-sec" style="display:none">
+        <h2>📋 DETALHES DAS OPORTUNIDADES</h2>
+        <div class="cards" id="cards"></div>
+      </section>
     </section>
 
     <aside id="alerts-sec" style="display:none">
@@ -214,11 +219,6 @@
       <table class="alerts-tbl"><tbody id="alerts"></tbody></table>
     </aside>
   </div>
-
-  <section id="cards-sec" style="display:none">
-    <h2>📋 DETALHES DAS OPORTUNIDADES</h2>
-    <div class="cards" id="cards"></div>
-  </section>
 
   <section>
     <h2>👁 MONITOR DE TODOS OS JOGOS AO VIVO <span class="n">transparência — abaixo de 70/100 não são apresentados como entrada</span></h2>
@@ -258,7 +258,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-15T21:24-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-17T20:23-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
