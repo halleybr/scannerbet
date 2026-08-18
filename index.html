@@ -725,7 +725,7 @@ function analyze(m) {
     const momBase = clamp(momMag / 40, 0, 1); // 0-1
     const sotBase = clamp(sot / 15, 0, 1);     // 15 chutes no alvo = máximo
     const dangBase = clamp(dang / 50, 0, 1);   // 50 ataques perigosos = máximo
-    const fireBonus = (fire || ball || combo) ? 0.15 : 0;
+    const fireBonus = (res.fire || res.ball || res.combo) ? 0.15 : 0;
     momentumEntryScore = round2(Math.min(momBase * 0.4 + sotBase * 0.3 + dangBase * 0.2 + fireBonus, 1.0));
     res.momentumEntryScore = momentumEntryScore;
   }
