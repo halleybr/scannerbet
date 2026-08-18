@@ -116,6 +116,10 @@
   .entry .mk{font-weight:700;font-size:14px}
   .entry .odds{font-size:12px;color:var(--muted)}
   .entry .odds b{color:var(--text)}
+  .entry.has{background:rgba(250,204,21,.09);border-color:#fbbf24}
+  .entry.has .lab{color:#fbbf24}
+  .entry.has .mk{color:#fbbf24}
+  .entry-tag.hl{background:rgba(250,204,21,.14);color:#fbbf24;padding:2px 9px;border-radius:999px;display:inline-block}
   .conf{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin-left:6px}
   .conf.high{background:rgba(34,197,94,.15);color:#4ade80}
   .conf.mid{background:rgba(245,158,11,.15);color:#fbbf24}
@@ -135,6 +139,8 @@
   .hres.green{background:rgba(34,197,94,.15);color:#4ade80}
   .hres.red{background:rgba(239,68,68,.15);color:#f87171}
   .hres.na{background:rgba(148,163,184,.15);color:#cbd5e1}
+  .hres.open{background:rgba(250,204,21,.16);color:#fbbf24}
+  .open-row{background:rgba(250,204,21,.05)}
   footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px}
   footer b{color:var(--muted)}
   .badge{display:inline-block;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35);
@@ -184,8 +190,8 @@
       <label>Chat ID (grupo ou usuário)
         <input type="text" id="tgChat" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
       </label>
-      <label class="chk"><input type="checkbox" id="tgDet"> Enviar ao detectar oportunidade</label>
-      <label class="chk"><input type="checkbox" id="tgLost"> Enviar ao perder força</label>
+      <label class="chk"><input type="checkbox" id="tgDet"> Enviar ao abrir entrada</label>
+      <label class="chk"><input type="checkbox" id="tgLost"> Enviar resultado (green/red)</label>
       <div style="display:flex;gap:8px">
         <button id="tgTest">Enviar teste</button>
         <button id="tgToggle">Ativar</button>
@@ -245,7 +251,12 @@
   </section>
 
   <section id="hist-sec" style="display:none">
-    <h2>📒 ENTRADAS DETECTADAS <span class="n">histórico para avaliar o desempenho do modelo</span></h2>
+    <h2>📒 ENTRADAS DETECTADAS <span class="n">histórico para avaliar o desempenho do modelo</span>
+      <span style="margin-left:10px;white-space:nowrap">
+        <button onclick="exportHistory()" title="Baixar o histórico em JSON (backup)">⬇ Exportar</button>
+        <button onclick="document.getElementById('histImport').click()" title="Restaurar de um arquivo JSON exportado">⬆ Restaurar</button>
+        <input type="file" id="histImport" accept=".json,application/json" style="display:none" onchange="importHistory(this)">
+      </span></h2>
     <div class="hist-summary" id="hist-summary"></div>
     <div class="tbl-wrap hist-wrap"><table id="hist"><thead>
       <tr><th>Horário</th><th>Jogo</th><th>Min</th><th>Mercado</th><th>Odd</th><th>Score</th><th>Resultado</th></tr>
@@ -273,7 +284,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T03:10-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T05:00-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -299,7 +310,12 @@ const state = {
 
 function loadLS(k, dflt) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? dflt; } catch { return dflt; } }
 function saveLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
-function save() { saveLS("rb_alerts", state.alerts.slice(0, ALERT_LIMIT)); saveLS("rb_history", state.history.slice(0, HISTORY_LIMIT)); }
+function save() {
+  saveLS("rb_alerts", state.alerts.slice(0, ALERT_LIMIT));
+  const hist = state.history.slice(0, HISTORY_LIMIT);
+  saveLS("rb_history", hist);
+  saveLS("rb_history_bak", hist); // backup — recupera se o histórico principal sumir (ex.: storage limpo)
+}
 
 /* ---------------- helpers ---------------- */
 const $ = (id) => document.getElementById(id);
@@ -620,12 +636,34 @@ function suggestEntry(m, sc) {
 
   // após 85' de jogo não se sugere mais entradas de gols (pouco tempo restante)
   const lateGame = m.minute > 85;
+  // no 1º tempo até os 38', sinal de gol vira entrada do 1º tempo (e não do jogo inteiro),
+  // usando a odd do mercado "Over 0.5 Gol 1º Tempo" (over_05_ht) da RoboBet
+  let htGoalPushed = false;
+  if (m.minute <= 38 && goals < 1) {
+    const ht = over.over_05_ht || null;
+    const htProb = ht ? numOrNull(ht.probability) : null;
+    const htOdd = ht ? (numOrNull(ht.market_odd) ?? numOrNull(ht.fair_odd)) : null;
+    const ft05Prob = over.over_05_ft ? numOrNull(over.over_05_ft.probability) : null;
+    const xg05 = sc.xgAvail && sc.xgRising && sc.xgTotal >= 0.60;
+    if (ft05Prob >= 60 || xg05) {
+      const prob = htProb ?? ft05Prob ?? Math.round(poissonProb(sc.xgTotal, 1) * 100);
+      out.push({
+        type: "goals",
+        label: "Over 0.5 Gol 1º Tempo",
+        odd: htOdd,
+        prob: prob,
+        prio: (prob >= 70 ? 4 : 2) + (htOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xg05 ? 1 : 0),
+      });
+      htGoalPushed = true;
+    }
+  }
   const goalCands = [
     { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1, need: 1, minXg: 0.60 },
     { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2, need: 2, minXg: 1.30 },
     { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3, need: 3, minXg: 2.10 },
   ];
   for (const c of goalCands) {
+    if (htGoalPushed) break; // já entrou no 1º tempo → não entra no jogo inteiro
     if (!c.still) continue;
     if (lateGame) continue;
     const o = over[c.key];
@@ -730,37 +768,11 @@ async function tgDrain() {
   tgBusy = false;
 }
 
-function tgAlertText(a, m, sc, sug) {
-  const lines = [];
-  if (a.t === "detected" && sc) {
-    lines.push("🚨 OPORTUNIDADE DETECTADA");
-    lines.push(`⚽ ${m.home} x ${m.away} (${m.league})`);
-    lines.push(`⏱ ${m.time || (m.minute + "'")} · Placar ${m.scoreHome} x ${m.scoreAway}`);
-    if (sc.xgAvail) lines.push(`📈 xG: ${fmt(sc.num.xgH)} x ${fmt(sc.num.xgA)}`);
-    lines.push(`⚡ Momentum: ${sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : (sc.momMag >= 14 ? "jogo aberto" : "equilibrado")}`);
-    lines.push(`🚩 Escanteios: ${sc.num.corners}`);
-    lines.push(`🎯 Chutes no alvo: ${sc.num.sot}/${sc.num.shots}`);
-    if (sc.num.dang > 0) lines.push(`💥 Ataques perigosos: ${sc.num.dang}`);
-    lines.push(`🔥 Score: ${sc.score}/100`);
-    if (sug && sug.primary) {
-      lines.push(`🟢 Entrada: ${sug.primary.label}` +
-        (sug.primary.odd != null ? ` @ ${fmt(sug.primary.odd)}` : "") +
-        (sug.primary.prob != null ? ` (prob. ${Math.round(sug.primary.prob)}%)` : ""));
-    }
-    if (m._reason) lines.push(`ℹ️ ${m._reason}`);
-  } else {
-    lines.push("🚨 OPORTUNIDADE PERDEU FORÇA");
-    lines.push(`⚽ ${m ? (m.home + " x " + m.away) : ""}`);
-    lines.push(a.body);
-  }
-  return lines.join("\n");
-}
-
-function maybeTg(a, m, sc, sug) {
-  if (!tg.enabled) return;
-  if (a.t === "detected" && !tg.fwdDetected) return;
-  if (a.t === "lost" && !tg.fwdLost) return;
-  tgPush(tgAlertText(a, m, sc, sug));
+/* Resultado green/red de uma entrada → Telegram */
+function tgResult(h, detail) {
+  if (!tg.enabled || !tg.fwdLost || !h.result) return;
+  const g = h.result === "green";
+  tgPush(`${g ? "✅ GREEN" : "❌ RED"} — ${h.market}\n⚽ ${h.match}\n${detail || ""}`);
 }
 
 function syncTgUI() {
@@ -811,7 +823,6 @@ function maybeAlerts() {
         state.history.some(h => h.result == null && h.market === sug.primary.label && sameMatch(h, m));
       if (!alreadyOpen && !state.alerts.some(a => a.t === "detected" && a.title === alert.title && Math.abs(a.at - now) < 3 * 60_000)) {
         state.alerts.unshift(alert);
-        maybeTg(alert, m, sc, sug);
       }
     } else if (score < prev.score - 10) {
       const dup = state.alerts.some(a => a.t === "lost" && a.title === `OPORTUNIDADE PERDEU FORÇA — ${m.home} x ${m.away}` && Math.abs(a.at - now) < 5 * 60_000);
@@ -821,7 +832,6 @@ function maybeAlerts() {
           title: `OPORTUNIDADE PERDEU FORÇA — ${m.home} x ${m.away}`,
           body: `Score caiu de ${prev.score}/100 para ${score}/100 (${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}).`,
         });
-        maybeTg({ t: "lost", at: now, title: "", body: `Score caiu de ${prev.score}/100 para ${score}/100 (${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}).` }, m, null, null);
       }
     }
   }
@@ -836,7 +846,6 @@ function maybeAlerts() {
           title: `OPORTUNIDADE PERDEU FORÇA — ${(m && (m.home + " x " + m.away)) || id}`,
           body: `O jogo saiu da lista de oportunidades (score ${prev.score}/100 → abaixo de ${MIN_SCORE}).`,
         });
-        maybeTg({ t: "lost", at: now, title: "", body: `O jogo saiu da lista de oportunidades (score ${prev.score}/100 → abaixo de ${MIN_SCORE}).` }, m, null, null);
       }
     }
   }
@@ -904,6 +913,10 @@ function ensureEntry(m, sc, sug) {
     detGoals: { h: m.scoreHome, a: m.scoreAway },   // placar no momento da detecção
     result: null,
   });
+  // Telegram: avisa quando a entrada é aberta (confirmada nas ENTRADAS ATIVAS)
+  if (tg.enabled && tg.fwdDetected) {
+    tgPush(`🟢 ENTRADA ABERTA\n⚽ ${m.home} x ${m.away} (${m.league})\n⏱ ${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}\n🎯 ${sug.primary.label}\n💰 Odd: ${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}${sug.primary.prob != null ? " · Prob. " + Math.round(sug.primary.prob) + "%" : ""}\n🔥 Score: ${sc.score}/100`);
+  }
 }
 
 /* Resolve o resultado de uma entrada usando dados finais da própria RoboBet:
@@ -911,7 +924,27 @@ function ensureEntry(m, sc, sug) {
    - Mais escanteios → escanteios finais (live-stats final continua disponível após o apito)
    - Próximo gol     → o time indicado marcou depois da detecção (placar final x detecção) */
 function resolveHistoryEntry(h, finals, names) {
+  resolveHistoryEntryInner(h, finals, names);
+  // Telegram: avisa o resultado quando a entrada resolve
+  if (h.result && tg.enabled && tg.fwdLost) {
+    const parts = [];
+    if (finals) parts.push(`🏁 ${finals.h}x${finals.a}`);
+    if (finals && finals.cornersH != null) parts.push(`Esc ${finals.cornersH + finals.cornersA}`);
+    if (finals && finals.ht && finals.ht.h != null) parts.push(`1ºT ${finals.ht.h}x${finals.ht.a}`);
+    tgResult(h, parts.join(" · "));
+  }
+}
+function resolveHistoryEntryInner(h, finals, names) {
   const total = (finals.h ?? 0) + (finals.a ?? 0);
+  // mercado do 1º tempo: decide pelos gols do 1T (live-stats); sem o dado, busca na fila
+  if (h.market.includes("1º Tempo")) {
+    if (!finals.ht || finals.ht.h == null || finals.ht.a == null) { queueFinalsFetch(h); return; }
+    const hm = h.market.match(/Over (\d+(?:\.\d+)?) Gol/);
+    const need = hm ? Number(hm[1]) + 0.5 : 1;
+    const htTotal = (finals.ht.h ?? 0) + (finals.ht.a ?? 0);
+    h.result = htTotal >= need ? "green" : "red";
+    return;
+  }
   if (h.market.startsWith("Over 0.5")) { h.result = total >= 1 ? "green" : "red"; return; }
   if (h.market.startsWith("Over 1.5")) { h.result = total >= 2 ? "green" : "red"; return; }
   if (h.market.startsWith("Over 2.5")) { h.result = total >= 3 ? "green" : "red"; return; }
@@ -949,9 +982,11 @@ function queueFinalsFetch(h) {
       const st = ls && ls.stats;
       const ft = st && (st.ft || st["2t"]);
       if (!ft || !ft.home || !ft.away || numOrNull(ft.home.goals) == null) return;
+      const t1 = st && st["1t"];
       const finals = {
         h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
         cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+        ht: (t1 && t1.home && t1.away) ? { h: numOrNull(t1.home.goals) ?? 0, a: numOrNull(t1.away.goals) ?? 0 } : null,
       };
       let any = false;        for (const e of state.history) {
           if (e.result || e.id !== h.id) continue;
@@ -977,7 +1012,24 @@ function resolveWonLive(m) {
     if (h.result) continue;
     if (!sameMatch(h, m)) continue;
     let won = false;
-    if (h.market.startsWith("Over 0.5")) won = total >= 1;
+    if (h.market.includes("1º Tempo")) {
+      // green assim que os gols do 1T atingem a linha; red quando o 1º tempo acaba sem bater
+      const st = m.liveStats && m.liveStats.stats;
+      const t1 = st && st["1t"];
+      const htGoals = (t1 && t1.home && t1.away)
+        ? (numOrNull(t1.home.goals) ?? 0) + (numOrNull(t1.away.goals) ?? 0) : null;
+      if (htGoals != null) {
+        const hm = h.market.match(/Over (\d+(?:\.\d+)?) Gol/);
+        const need = hm ? Number(hm[1]) + 0.5 : 1;
+        if (htGoals >= need) won = true;
+        else if (m.period === "2t" || m.period === "HT" || m.minute >= 46) {
+          h.result = "red"; any = true;
+          tgResult(h, "1º tempo encerrado sem o gol");
+          continue;
+        }
+      }
+    }
+    else if (h.market.startsWith("Over 0.5")) won = total >= 1;
     else if (h.market.startsWith("Over 1.5")) won = total >= 2;
     else if (h.market.startsWith("Over 2.5")) won = total >= 3;
     else {
@@ -990,7 +1042,10 @@ function resolveWonLive(m) {
         }
       }
     }
-    if (won) { h.result = "green"; any = true; }
+    if (won) {
+      h.result = "green"; any = true;
+      tgResult(h, `⏱ ${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}`);
+    }
   }
   if (any) save();
 }
@@ -1005,9 +1060,11 @@ async function resolveFinished(m) {
     const st = ls && ls.stats;
     const ft = st && (st.ft || st["2t"]);
     if (ft && ft.home && ft.away && numOrNull(ft.home.goals) != null) {
+      const t1 = st && st["1t"];
       finals = {
         h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
         cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+        ht: (t1 && t1.home && t1.away) ? { h: numOrNull(t1.home.goals) ?? 0, a: numOrNull(t1.away.goals) ?? 0 } : null,
       };
     }
   } catch { /* usa o fallback abaixo */ }
@@ -1052,9 +1109,11 @@ function resolveGoneFromInplay(liveIds) {
         if (!ft || !ft.home || !ft.away || numOrNull(ft.home.goals) == null) return;
         const ev = ls.event;
         const parts = h.match.split(" x ");
+        const t1 = st && st["1t"];
         const finals = {
           h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
           cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+          ht: (t1 && t1.home && t1.away) ? { h: numOrNull(t1.home.goals) ?? 0, a: numOrNull(t1.away.goals) ?? 0 } : null,
         };
         const names = {
           home: (ev.home_team && ev.home_team.name) || parts[0],
@@ -1177,7 +1236,7 @@ function renderRanking(opps) {
       <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
       <td>${momText(m, sc)}</td>
       <td>${sc.num.corners}</td>
-      <td><span class="entry-tag ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span></td>
+      <td><span class="entry-tag hl ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span></td>
     </tr>`;
   }).join("") + "</tbody></table></div>";
 }
@@ -1246,14 +1305,15 @@ function renderActive() {
     " · removidas quando o jogo terminar";
   const tb = $("active").querySelector("tbody");
   tb.innerHTML = entries.map(({ h, m }) => {
+    const open = h.result == null;
     const status = h.result === "green"
       ? '<span class="hres green">🟢 GREEN</span>'
-      : '<span class="hres na">em aberto</span>';
-    return `<tr>
+      : '<span class="hres open">em aberto</span>';
+    return `<tr${open ? ' class="open-row"' : ""}>
       <td><div class="teams">${esc(m.home)} x ${esc(m.away)}</div><div class="lg">${esc(m.league)}</div></td>
       <td>${esc(m.time || (m.minute + "'"))}</td>
       <td>${m.scoreHome} x ${m.scoreAway}</td>
-      <td>${esc(h.market)}</td>
+      <td>${open ? `<span class="entry-tag hl">${esc(h.market)}</span>` : esc(h.market)}</td>
       <td>${esc(h.odd)}</td>
       <td>${(m._sc && m._sc.score) || h.score}/100</td>
       <td>${status}</td>
@@ -1272,7 +1332,7 @@ function renderOpps85() {
   grid.innerHTML = opps.map(m => {
     const sc = m._sc, sug = m._sug;
     const entry = sug && sug.primary
-      ? `🟢 ${esc(sug.primary.label)}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}`
+      ? `<span class="entry-tag hl">🟢 ${esc(sug.primary.label)}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}</span>`
       : '<span class="nd">— monitorando —</span>';
     return `<table class="opp85"><tbody>
       <tr class="h"><td colspan="2">🔥 ENTRADA FORTE <span class="pill">${sc.score}/100</span></td></tr>
@@ -1312,7 +1372,7 @@ function renderCards(opps) {
       </div>
       ${sparkline(m)}
       ${sug && !sug.primary ? `<div class="entry"><div class="lab">Possível entrada</div><div class="mk"><span class="interest">Nenhum mercado com linha/odd favorável agora — monitorando.</span></div></div>` : ""}
-      ${sug && sug.primary ? `<div class="entry">
+      ${sug && sug.primary ? `<div class="entry has">
         <div class="lab">Possível entrada · ${strength}</div>
         <div class="mk">🟢 ${esc(sug.primary.label)}</div>
         <div class="odds">Odd atual: <b>${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}</b>${sug.primary.prob != null ? ` · Prob. do modelo: <b>${Math.round(sug.primary.prob)}%</b>` : ""} ${conf}</div>
@@ -1375,6 +1435,36 @@ function renderHistory() {
   }).join("");
 }
 
+/* backup manual: baixa o histórico em JSON e restaura de arquivo */
+function exportHistory() {
+  const data = { history: state.history, alerts: state.alerts, at: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "scannergreen-historico-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+}
+function importHistory(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const data = JSON.parse(rd.result);
+      const arr = Array.isArray(data) ? data : (data.history || []);
+      if (!Array.isArray(arr) || !arr.length) throw new Error("vazio");
+      state.history = arr;
+      save();
+      dedupeHistory();
+      renderAll();
+      alert(`✅ Histórico restaurado: ${state.history.length} entradas.`);
+    } catch { alert("❌ Arquivo inválido — use um JSON exportado por este painel."); }
+    input.value = "";
+  };
+  rd.readAsText(f);
+}
+
 /* ---------------- loop ---------------- */
 function scheduleNext() {
   clearTimeout(state.timer);
@@ -1401,6 +1491,11 @@ syncTgUI();
 $("build").textContent = BUILD;
 
 /* primeira carga */
+/* auto-recuperação: se o histórico principal sumiu (storage limpo/restart) mas há backup, restaura */
+if (!state.history.length) {
+  const bak = loadLS("rb_history_bak", []);
+  if (bak.length) { state.history = bak; save(); }
+}
 dedupeHistory();
 tick();
 </script>
