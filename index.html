@@ -917,11 +917,10 @@ function maybeAlerts() {
     if (sc.highEfficiency && !sc.goalAlert) {
       const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('EFICIÊNCIA') && Math.abs(a.at - now) < 5 * 60_000);
       if (!dup) {
-        const team = (numOrNull(H.goals) ?? 0) >= (numOrNull(A.goals) ?? 0) ? m.home : m.away;
         state.alerts.unshift({
           t: "detected", at: now,
           title: `⚽ GOLS — ALTA EFICIÊNCIA — ${m.home} x ${m.away}`,
-          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${team} converteu ${Math.round(sc.efficiency * 100)}% dos chutes no alvo (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${(sc.score)}/100`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · Alta eficiência: ${Math.round(sc.efficiency * 100)}% conversão (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${sc.score}/100`,
         });
       }
     }
