@@ -787,10 +787,12 @@ function suggestEntry(m, sc) {
     // sinal de xG: real ou estimado por momentum
     const xgSig = sc.xgAvail && sc.xgRising && sc.xgTotal >= c.minXg;
     // Quando xG real não disponível, usa estimativa baseada em momentum + chutes
-    const useEstXG = !xgSig && sc.estXG != null && sc.estXG >= c.minXg && sc.momentumEntryScore >= 0.4 && sc.momAvail;
+    // Aceita xG estimado se: xG >= minimo E (momentumEntry >= 0.3 OU xG >= 1.5)
+    const useEstXG = !xgSig && sc.estXG != null && sc.estXG >= c.minXg && 
+      (sc.momentumEntryScore >= 0.3 || sc.estXG >= 1.5) && sc.momAvail;
     const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) : null);
     if (fProb == null && !xgSig && !useEstXG) continue;
-    if (fProb != null && fProb < 55 && !xgSig && !useEstXG) continue;
+    if (fProb != null && fProb < 50 && !xgSig && !useEstXG) continue;
     const prob = fProb != null ? fProb : xgProb;
     if (prob == null) continue;
     out.push({
