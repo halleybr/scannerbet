@@ -698,6 +698,32 @@ function analyze(m) {
   res.goalsTotal = goalsTotal;
   res.highEfficiency = highEfficiency;
 
+  // --- Estimativa de xG baseada em momentum + dados disponíveis ---
+  // Quando o xG real da API não está disponível (retorna 0), estimamos
+  // usando: momentum sustentado, chutes no alvo, ataques perigosos
+  let estXG = null;
+  if (!xgAvail && sot > 0) {
+    // Fórmula: xG estimado ≈ (chutes_no_alvo * 0.10) + (momentum_sustentado * 0.02) + (ataques_perigosos * 0.005)
+    // Baseado em benchmarks: chutes no alvo têm ~10% de chance de gol cada
+    const sotFactor = sot * 0.10;
+    const momFactor = momMag > 20 ? (momMag - 20) * 0.008 : 0; // momentum acima de 20 contribui
+    const dangFactor = dang * 0.005;
+    estXG = round2(Math.min(sotFactor + momFactor + dangFactor, 5.0)); // cap em 5.0
+    res.estXG = estXG;
+  }
+
+  // --- Score de momentum para entradas ---
+  // Combina momentum sustentado + chutes + ataques perigosos
+  let momentumEntryScore = 0;
+  if (momAvail) {
+    const momBase = clamp(momMag / 40, 0, 1); // 0-1
+    const sotBase = clamp(sot / 15, 0, 1);     // 15 chutes no alvo = máximo
+    const dangBase = clamp(dang / 50, 0, 1);   // 50 ataques perigosos = máximo
+    const fireBonus = (fire || ball || combo) ? 0.15 : 0;
+    momentumEntryScore = round2(Math.min(momBase * 0.4 + sotBase * 0.3 + dangBase * 0.2 + fireBonus, 1.0));
+    res.momentumEntryScore = momentumEntryScore;
+  }
+
   return res;
 }
 
@@ -752,30 +778,34 @@ function suggestEntry(m, sc) {
     const o = over[c.key];
     const fProb = o ? numOrNull(o.probability) : null;
     const fOdd = o ? numOrNull(o.market_odd) : null;
-    // sinal de xG: total subindo acima do limiar → possibilidade de gols na partida
+    // sinal de xG: real ou estimado por momentum
     const xgSig = sc.xgAvail && sc.xgRising && sc.xgTotal >= c.minXg;
-    const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : null;
-    if (fProb == null && !xgSig) continue;
-    if (fProb != null && fProb < 60 && !xgSig) continue;
+    // Quando xG real não disponível, usa estimativa baseada em momentum + chutes
+    const useEstXG = !xgSig && sc.estXG != null && sc.estXG >= c.minXg && sc.momentumEntryScore >= 0.4 && sc.momAvail;
+    const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) : null);
+    if (fProb == null && !xgSig && !useEstXG) continue;
+    if (fProb != null && fProb < 55 && !xgSig && !useEstXG) continue;
     const prob = fProb != null ? fProb : xgProb;
+    if (prob == null) continue;
     out.push({
       type: "goals", label: c.label,
       odd: fOdd,
       prob: prob,
-      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0),
+      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0),
+      source: xgSig ? 'xG' : (useEstXG ? 'est' : 'forecast'),
     });
   }
 
   // escanteios: mercado aberto + pressão real do gráfico de cantos
   // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte).
-  // Não espera os 70': basta ~15 min do início do 2º tempo (~60') com o gráfico
-  // de cantos mostrando pressão (subida de um dos times ou sinal forte).
-  const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert ||
+  // Também usa momentum sustentado como sinal de pressão
+  const momCornersSignal = sc.momAvail && sc.momMag >= 20 && (sc.num.sot >= 5 || sc.num.dang >= 25);
+  const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert || momCornersSignal ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
   // sinal forte do gráfico de cantos dispensa o gate do componente de escanteios
-  const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert ||
+  const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert || momCornersSignal ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
-  if (m.minute >= 60 && (sc.xcRising || cpStrong) && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
+  if (m.minute >= 55 && (sc.xcRising || cpStrong || momCornersSignal) && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 50 || cpStrong)) {
     // enquanto houver uma entrada de escanteio ABERTA (sem green) no mesmo jogo, não envia outra
     const openCorners = state.history.some(h =>
       h.result == null && /^Mais escanteios/.test(h.market) && sameMatch(h, m));
@@ -800,7 +830,8 @@ function suggestEntry(m, sc) {
           type: "corners",
           label: `Mais escanteios — Over ${fmt(line, 1)}`,
           odd: null, prob: null,
-          prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
+          prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0) + (momCornersSignal ? 1 : 0),
+          source: sc.xcRising ? 'xc' : (momCornersSignal ? 'momentum' : 'chart'),
         });
       }
     }
@@ -816,6 +847,7 @@ function buildReason(m, sc, sug) {
   const bits = [];
   const n = sc.num;
   if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}${sc.xgRising ? " 📈" : ""}`);
+  else if (sc.estXG != null) bits.push(`xG est: ~${fmt(sc.estXG)} (momentum)`);
   else bits.push("xG N/D");
   bits.push(sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})`
     : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado");
@@ -825,6 +857,7 @@ function buildReason(m, sc, sug) {
   if (sc.fire || sc.ball || sc.combo) bits.push(sc.fire && sc.ball ? "Fire+Ball ativos" : (sc.fire ? "Fire ativo" : (sc.ball ? "Ball ativo" : "Combo ativo")));
   if (m.redH || m.redA) bits.push("cartão vermelho");
   if (sug.cornersExp != null) bits.push(`escanteios esperados ${fmt(sug.cornersExp, 1)}`);
+  if (sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.5) bits.push(`momentum entry: ${Math.round(sc.momentumEntryScore * 100)}%`);
   return bits.slice(0, 5).join(" + ") + ".";
 }
 
@@ -906,10 +939,12 @@ function maybeAlerts() {
     if (!prev || prev.score < MIN_SCORE) {
       if (prev && prev.present === false) continue; // já avisado que saiu
       const sug = m._sug;
+      const xgText = sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} est` : "N/D");
+      const momText2 = sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : "equilibrado";
       const alert = {
         t: "detected", at: now,
         title: `OPORTUNIDADE DETECTADA — ${m.home} x ${m.away}`,
-        body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · xG ${sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : "N/D"} · Momentum ${sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : "equilibrado"} · ${pl(sc.num.corners, "escanteio")} · ${pl(sc.num.sot, "chute no alvo")} · Score ${score}/100` +
+        body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · xG ${xgText} · Momentum ${momText2} · ${pl(sc.num.corners, "escanteio")} · ${pl(sc.num.sot, "chute no alvo")} · Score ${score}/100` +
           (sug && sug.primary ? ` → 🟢 ${sug.primary.label}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}` : ""),
       };
       // não re-envia alerta se já existe uma entrada ABERTA para o mesmo jogo+mercado
@@ -940,6 +975,24 @@ function maybeAlerts() {
           t: "detected", at: now,
           title: `⚽ GOLS — ALTA EFICIÊNCIA — ${m.home} x ${m.away}`,
           body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${sc.score}/100`,
+        });
+      }
+    }
+    // Alerta de momentum + xG estimado (entrada por pressão)
+    const lateGame = m.minute > 85;
+    if (sc.momentumEntryScore >= 0.5 && sc.momAvail && m.minute >= 15 && !lateGame) {
+      const sug = m._sug;
+      const hasGoalEntry = sug && sug.entries && sug.entries.some(e => e.type === 'goals');
+      const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('MOMENTUM') && Math.abs(a.at - now) < 5 * 60_000);
+      if (!dup && hasGoalEntry) {
+        const parts = [`momentum: ${Math.round(sc.momentumEntryScore * 100)}%`];
+        if (sc.estXG != null) parts.push(`xG est: ~${fmt(sc.estXG)}`);
+        if (sc.momDir) parts.push(`para ${sc.momDir === 'home' ? m.home : m.away}`);
+        if (sc.fire || sc.ball || sc.combo) parts.push(sc.fire ? '🔥 Fire' : (sc.ball ? '⚽ Ball' : '💥 Combo'));
+        state.alerts.unshift({
+          t: "detected", at: now,
+          title: `🎯 MOMENTUM — ${m.home} x ${m.away}`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} · Score ${sc.score}/100`,
         });
       }
     }
@@ -1360,7 +1413,7 @@ function renderRanking(opps) {
       <td>${esc(m.time || (m.minute + "'"))}</td>
       <td>${m.scoreHome} x ${m.scoreAway}</td>
       <td><span class="score-pill ${pill}">${sc.score}/100</span></td>
-      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
+      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="lg">(est)</span>` : '<span class="nd">N/D</span>')}</td>
       <td>${momText(m, sc)}</td>
       <td>${sc.num.corners}</td>
       <td><span class="entry-tag hl ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span></td>
@@ -1474,7 +1527,7 @@ function renderOpps85() {
       <tr class="h"><td colspan="2">🔥 ENTRADA FORTE <span class="pill">${sc.score}/100</span></td></tr>
       <tr><td class="k">Jogo</td><td><b>${esc(m.home)} x ${esc(m.away)}</b><span class="lg">${esc(m.league)}</span></td></tr>
       <tr><td class="k">⏱ Min</td><td>${esc(m.time || (m.minute + "'"))} · <b>${m.scoreHome} x ${m.scoreAway}</b></td></tr>
-      <tr><td class="k">📈 xG</td><td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td></tr>
+      <tr><td class="k">📈 xG</td><td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="lg">(estimado)</span>` : '<span class="nd">N/D</span>')}</td></tr>
       <tr><td class="k">⚡ Mom.</td><td>${momText(m, sc)}</td></tr>
       <tr><td class="k">🟢 Entrada</td><td>${entry}</td></tr>
     </tbody></table>`;
@@ -1509,8 +1562,8 @@ function renderCards(opps) {
       </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
       <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))}${(() => { const inj = estimateInjuryTime(m); if (!inj) return ''; const tag = inj.official ? '✅ +' + inj.min : '⏱ +' + inj.min + ' (est.)'; const bg = inj.official ? 'rgba(34,197,94,.15)' : 'rgba(251,191,36,.15)'; const col = inj.official ? '#4ade80' : '#fbbf24'; const bdr = inj.official ? 'rgba(34,197,94,.35)' : 'rgba(251,191,36,.35)'; return ' <span class="badge" style="background:' + bg + ';color:' + col + ';border-color:' + bdr + '">' + tag + '</span>'; })()} · Placar: <b>${m.scoreHome} x ${m.scoreAway}</b>${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
       <div class="stats">
-        ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : '<span class="nd">N/D</span>'}</span></div>
-        <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}</span></div>
+        ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">estimado</span>` : '<span class="nd">N/D</span>')}</span></div>
+        <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}${sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.4 ? ` <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">entry ${Math.round(sc.momentumEntryScore * 100)}%</span>` : ''}</span></div>
         <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
         <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
         <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
@@ -1550,7 +1603,7 @@ function renderMonitor(matches) {
       <td>${esc(m.time || (m.minute + "'"))}</td>
       <td>${m.scoreHome} x ${m.scoreAway}</td>
       <td>${sc.score >= 70 ? `<span class="score-pill ${pill}">${sc.score}/100</span>` : `<span class="nd">${sc.score}/100</span>`}</td>
-      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
+      <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="lg">(est)</span>` : '<span class="nd">N/D</span>')}</td>
       <td>${momText(m, sc)}</td>
       <td>${sc.num.corners}</td>
       <td>${sc.num.shots} (${sc.num.sot})</td>
