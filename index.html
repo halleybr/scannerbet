@@ -704,12 +704,22 @@ function suggestEntry(m, sc) {
         line = sc.num.corners + 1.5; // pressão forte → atual + 1 escanteio extra
       }
       if (line != null && sc.num.corners >= line) line = sc.num.corners + 1.5; // nunca abaixo do atual + 1
-      out.push({
-        type: "corners",
-        label: line != null ? `Mais escanteios — Over ${fmt(line, 1)}` : "Mais escanteios",
-        odd: null, prob: null,
-        prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
-      });
+      // evita entrada absurda: confere quantos escanteios já saíram e se a linha é
+      // alcançável até o fim do jogo (ritmo forte sustentável ≈ 0,2 escanteio/min,
+      // entre 2 e 6 extras de uma vez) — ex.: aos 62' com 6 cantos, linha > 12,5 é inviável
+      if (line != null) {
+        const remaining = Math.max(90 - minute, 5);
+        const maxExtra = Math.max(2, Math.min(6, Math.round(0.2 * remaining)));
+        if (line > sc.num.corners + maxExtra) line = null; // inviável → não entra
+      }
+      if (line != null) {
+        out.push({
+          type: "corners",
+          label: `Mais escanteios — Over ${fmt(line, 1)}`,
+          odd: null, prob: null,
+          prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
+        });
+      }
     }
   }
 
