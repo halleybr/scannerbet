@@ -17,7 +17,7 @@
     --red:#ef4444; --green:#22c55e; --amber:#f59e0b; --blue:#3b82f6;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{background:var(--bg);color:var(--text);
+  html,body{background:var(--bg);color:var(--text);overflow-x:hidden;
     font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif}
   a{color:var(--blue);text-decoration:none}
   .wrap{max-width:1100px;margin:0 auto;padding:16px}
@@ -46,7 +46,7 @@
   @media (max-width: 960px){ .main-grid{grid-template-columns:1fr} }
   h2.destaque{font-size:18px;padding:12px 16px;border:1px solid rgba(239,68,68,.45);border-radius:12px;
     background:linear-gradient(90deg,rgba(239,68,68,.15),rgba(239,68,68,.04) 55%,transparent);
-    box-shadow:0 0 22px rgba(239,68,68,.14);gap:10px}
+    box-shadow:0 0 22px rgba(239,68,68,.14);gap:10px;flex-wrap:wrap}
   h2.destaque .n{color:#fca5a5}
   .hot{display:inline-flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;font-weight:800;
     color:#fff;background:#7f1d1d;border:1px solid rgba(239,68,68,.7);border-radius:999px;padding:4px 12px;
@@ -101,7 +101,7 @@
     border-radius:10px;font-size:14px}
   .empty b{color:var(--text)}
   /* cards */
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:12px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
   .card .top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
   .card .leag{color:var(--dim);font-size:11px}
@@ -140,6 +140,18 @@
   .badge{display:inline-block;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35);
     border-radius:6px;font-size:10.5px;font-weight:700;padding:1px 6px;margin-left:6px;letter-spacing:.5px}
   .fire{color:#f87171}
+  /* ajustes para celular: tabelas fluem na largura da tela, esconde colunas
+     secundárias e evita o zoom automático do iOS ao focar inputs/selects */
+  @media (max-width:720px){
+    select,button,input[type=text],input[type=password]{font-size:16px}
+    table{min-width:0}
+    #rank-tbl th:nth-child(6),#rank-tbl td:nth-child(6),
+    #rank-tbl th:nth-child(7),#rank-tbl td:nth-child(7),
+    #monitor th:nth-child(2),#monitor td:nth-child(2),
+    #monitor th:nth-child(6),#monitor td:nth-child(6),
+    #monitor th:nth-child(7),#monitor td:nth-child(7),
+    #monitor th:nth-child(10),#monitor td:nth-child(10){display:none}
+  }
   /* telegram */
   .tg-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
   .tg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end}
@@ -273,7 +285,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T01:50-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T02:10-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -1143,7 +1155,7 @@ function renderRanking(opps) {
       `O modelo não força entrada — os dados são atualizados automaticamente.</span></div>`;
     return;
   }
-  box.innerHTML = `<div class="tbl-wrap"><table><thead><tr>
+  box.innerHTML = `<div class="tbl-wrap"><table id="rank-tbl"><thead><tr>
     <th>#</th><th>Jogo</th><th>Min</th><th>Placar</th><th>Score</th><th>xG</th><th>Momentum</th><th>Escanteios</th><th>Entrada</th>
   </tr></thead><tbody>` + withEntry.map((m, i) => {
     const sc = m._sc, sug = m._sug;
