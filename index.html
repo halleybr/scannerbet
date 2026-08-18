@@ -702,6 +702,7 @@ function analyze(m) {
   // Quando o xG real da API não está disponível (retorna 0), estimamos
   // usando: momentum sustentado, chutes no alvo, ataques perigosos
   let estXG = null;
+  let estXgRising = false;
   if (!xgAvail && sot > 0) {
     // Fórmula: xG estimado ≈ (chutes_no_alvo * 0.10) + (momentum_sustentado * 0.02) + (ataques_perigosos * 0.005)
     // Baseado em benchmarks: chutes no alvo têm ~10% de chance de gol cada
@@ -710,6 +711,11 @@ function analyze(m) {
     const dangFactor = dang * 0.005;
     estXG = round2(Math.min(sotFactor + momFactor + dangFactor, 5.0)); // cap em 5.0
     res.estXG = estXG;
+    // Detectar tendência: comparar com valor anterior
+    const prevEst = m.estXgPrev;
+    estXgRising = prevEst != null && estXG >= prevEst + 0.1; // subiu pelo menos 0.1
+    res.estXgRising = estXgRising;
+    m.estXgPrev = estXG; // armazenar para próxima comparação
   }
 
   // --- Score de momentum para entradas ---
@@ -847,7 +853,7 @@ function buildReason(m, sc, sug) {
   const bits = [];
   const n = sc.num;
   if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}${sc.xgRising ? " 📈" : ""}`);
-  else if (sc.estXG != null) bits.push(`xG est: ~${fmt(sc.estXG)} (momentum)`);
+  else if (sc.estXG != null) bits.push(`xG est: ~${fmt(sc.estXG)}${sc.estXgRising ? " 📈" : ""}`);
   else bits.push("xG N/D");
   bits.push(sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})`
     : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado");
@@ -939,7 +945,7 @@ function maybeAlerts() {
     if (!prev || prev.score < MIN_SCORE) {
       if (prev && prev.present === false) continue; // já avisado que saiu
       const sug = m._sug;
-      const xgText = sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} est` : "N/D");
+      const xgText = sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} est${sc.estXgRising ? ' 📈' : ''}` : "N/D");
       const momText2 = sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : "equilibrado";
       const alert = {
         t: "detected", at: now,
@@ -986,7 +992,7 @@ function maybeAlerts() {
       const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('MOMENTUM') && Math.abs(a.at - now) < 5 * 60_000);
       if (!dup && hasGoalEntry) {
         const parts = [`momentum: ${Math.round(sc.momentumEntryScore * 100)}%`];
-        if (sc.estXG != null) parts.push(`xG est: ~${fmt(sc.estXG)}`);
+        if (sc.estXG != null) parts.push(`xG est: ~${fmt(sc.estXG)}${sc.estXgRising ? ' 📈' : ''}`);
         if (sc.momDir) parts.push(`para ${sc.momDir === 'home' ? m.home : m.away}`);
         if (sc.fire || sc.ball || sc.combo) parts.push(sc.fire ? '🔥 Fire' : (sc.ball ? '⚽ Ball' : '💥 Combo'));
         state.alerts.unshift({
@@ -1527,7 +1533,7 @@ function renderOpps85() {
       <tr class="h"><td colspan="2">🔥 ENTRADA FORTE <span class="pill">${sc.score}/100</span></td></tr>
       <tr><td class="k">Jogo</td><td><b>${esc(m.home)} x ${esc(m.away)}</b><span class="lg">${esc(m.league)}</span></td></tr>
       <tr><td class="k">⏱ Min</td><td>${esc(m.time || (m.minute + "'"))} · <b>${m.scoreHome} x ${m.scoreAway}</b></td></tr>
-      <tr><td class="k">📈 xG</td><td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="lg">(estimado)</span>` : '<span class="nd">N/D</span>')}</td></tr>
+      <tr><td class="k">📈 xG</td><td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="lg">(estimado)</span>${sc.estXgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">📈 subindo</span>' : ''}` : '<span class="nd">N/D</span>')}</td></tr>
       <tr><td class="k">⚡ Mom.</td><td>${momText(m, sc)}</td></tr>
       <tr><td class="k">🟢 Entrada</td><td>${entry}</td></tr>
     </tbody></table>`;
@@ -1562,7 +1568,7 @@ function renderCards(opps) {
       </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
       <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))}${(() => { const inj = estimateInjuryTime(m); if (!inj) return ''; const tag = inj.official ? '✅ +' + inj.min : '⏱ +' + inj.min + ' (est.)'; const bg = inj.official ? 'rgba(34,197,94,.15)' : 'rgba(251,191,36,.15)'; const col = inj.official ? '#4ade80' : '#fbbf24'; const bdr = inj.official ? 'rgba(34,197,94,.35)' : 'rgba(251,191,36,.35)'; return ' <span class="badge" style="background:' + bg + ';color:' + col + ';border-color:' + bdr + '">' + tag + '</span>'; })()} · Placar: <b>${m.scoreHome} x ${m.scoreAway}</b>${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
       <div class="stats">
-        ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">estimado</span>` : '<span class="nd">N/D</span>')}</span></div>
+        ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">estimado</span>${sc.estXgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">📈 subindo</span>' : ''}` : '<span class="nd">N/D</span>')}</span></div>
         <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}${sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.4 ? ` <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">entry ${Math.round(sc.momentumEntryScore * 100)}%</span>` : ''}</span></div>
         <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
         <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
