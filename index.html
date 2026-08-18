@@ -804,17 +804,21 @@ function suggestEntry(m, sc) {
     // Aceita xG estimado se: xG >= minimo E (momentumEntry >= 0.3 OU xG >= 1.5)
     const useEstXG = !xgSig && sc.estXG != null && sc.estXG >= c.minXg && 
       (sc.momentumEntryScore >= 0.3 || sc.estXG >= 1.5) && sc.momAvail;
-    const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) : null);
-    if (fProb == null && !xgSig && !useEstXG) continue;
-    if (fProb != null && fProb < 50 && !xgSig && !useEstXG) continue;
+    // Nova condição: xG subindo + chutes no alvo >= 3 + xG >= minimo
+    const xgRisingWithShots = !xgSig && !useEstXG && sc.xgRising && sc.num.sot >= 3 && sc.xgTotal >= c.minXg;
+    const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) 
+      : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) 
+      : (xgRisingWithShots ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : null));
+    if (fProb == null && !xgSig && !useEstXG && !xgRisingWithShots) continue;
+    if (fProb != null && fProb < 45 && !xgSig && !useEstXG && !xgRisingWithShots) continue;
     const prob = fProb != null ? fProb : xgProb;
     if (prob == null) continue;
     out.push({
       type: "goals", label: c.label,
       odd: fOdd,
       prob: prob,
-      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0),
-      source: xgSig ? 'xG' : (useEstXG ? 'est' : 'forecast'),
+      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0) + (xgRisingWithShots ? 1 : 0),
+      source: xgSig ? 'xG' : (useEstXG ? 'est' : (xgRisingWithShots ? 'xG+shots' : 'forecast')),
     });
   }
 
@@ -1031,6 +1035,21 @@ function maybeAlerts() {
           t: "detected", at: now,
           title: `🎯 CHUTES SUBINDO — ${m.home} x ${m.away}`,
           body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} · Score ${sc.score}/100`,
+        });
+      }
+    }
+    // Alerta de xG subindo + chutes (gera entrada)
+    if (sc.xgRising && sc.num.sot >= 3 && m.minute >= 10 && !lateGame) {
+      const sug = m._sug;
+      const hasGoalEntry = sug && sug.entries && sug.entries.some(e => e.type === 'goals');
+      const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('xG') && Math.abs(a.at - now) < 5 * 60_000);
+      if (!dup && hasGoalEntry) {
+        const parts = [`xG: ${fmt(sc.num.xgH)}x${fmt(sc.num.xgA)} 📈`, `no alvo: ${sc.num.sot}`];
+        if (sc.momDir) parts.push(`momentum: ${sc.momDir === 'home' ? m.home : m.away}`);
+        state.alerts.unshift({
+          t: "detected", at: now,
+          title: `⚽ xG SUBINDO — ${m.home} x ${m.away}`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} → 🟢 Entrada gerada · Score ${sc.score}/100`,
         });
       }
     }
