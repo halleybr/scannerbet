@@ -672,14 +672,23 @@ function analyze(m) {
   res.score = score;
   res.valid = score > 0 && score >= MIN_SCORE;
 
-  // ---- Eficiência de conversão (gols por finalização) ----
+  // ---- Eficiência de conversão (baseada em xG + finalização) ----
   const goalsTotal = (numOrNull(H.goals) ?? 0) + (numOrNull(A.goals) ?? 0);
   const shotsOnTarget = sot;
-  // Eficiência = gols / chutes no alvo (quanto maior, mais clínico)
+  // Eficiência clássica: gols / chutes no alvo
   const efficiency = shotsOnTarget > 0 ? goalsTotal / shotsOnTarget : 0;
-  // Time com alta eficiência: >30% de conversão (1 gol a cada 3 chutes no alvo)
-  const highEfficiency = efficiency >= 0.30 && goalsTotal >= 1 && minute >= 20;
+  // Eficiência xG: gols reais vs xG esperado (>1.0 = sobreperformance)
+  const xgEfficiency = xgAvail && (xgH + xgA) > 0 ? goalsTotal / (xgH + xgA) : null;
+  // Indicadores de alta eficiência:
+  // 1) Conversão clássica >30% (time clínico)
+  // 2) xG efficiency >1.2 (marcando MAIS do que o esperado)
+  // 3) xG rising + conversão >25% (pressão aumentando e convertendo)
+  const classicHigh = efficiency >= 0.30 && goalsTotal >= 1 && minute >= 20;
+  const xgHigh = xgEfficiency != null && xgEfficiency >= 1.2 && goalsTotal >= 1 && minute >= 20;
+  const risingEfficient = res.xgRising && efficiency >= 0.25 && goalsTotal >= 1 && minute >= 30;
+  const highEfficiency = classicHigh || xgHigh || risingEfficient;
   res.efficiency = round2(efficiency);
+  res.xgEfficiency = xgEfficiency ? round2(xgEfficiency) : null;
   res.goalsTotal = goalsTotal;
   res.highEfficiency = highEfficiency;
 
@@ -917,10 +926,13 @@ function maybeAlerts() {
     if (sc.highEfficiency && !sc.goalAlert) {
       const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('EFICIÊNCIA') && Math.abs(a.at - now) < 5 * 60_000);
       if (!dup) {
+        const parts = [`${Math.round(sc.efficiency * 100)}% conversão`];
+        if (sc.xgEfficiency != null) parts.push(`xG eff: ${sc.xgEfficiency}x`);
+        if (sc.xgRising) parts.push('📈 xG subindo');
         state.alerts.unshift({
           t: "detected", at: now,
           title: `⚽ GOLS — ALTA EFICIÊNCIA — ${m.home} x ${m.away}`,
-          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · Alta eficiência: ${Math.round(sc.efficiency * 100)}% conversão (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${sc.score}/100`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${sc.score}/100`,
         });
       }
     }
@@ -1145,6 +1157,9 @@ async function resolveFinished(m) {
   const names = { home: m.home, away: m.away };
   try {
     const ls = await fetchJSON(`${API}/events/${m.id}/live-stats`, 20000, 1);
+    // Verificar se o jogo realmente terminou antes de resolver
+    const ev = ls && ls.event;
+    if (ev && ev.status !== "finished" && ev.period !== "FT") return; // ainda não acabou
     const st = ls && ls.stats;
     const ft = st && (st.ft || st["2t"]);
     if (ft && ft.home && ft.away && numOrNull(ft.home.goals) != null) {
