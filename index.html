@@ -273,7 +273,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T01:25-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T01:50-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -617,7 +617,6 @@ function suggestEntry(m, sc) {
   const cornersExp = (f.corners && f.corners.match_total && numOrNull(f.corners.match_total.value)) ?? null;
   const goals = m.scoreHome + m.scoreAway;
   const minute = Math.max(m.minute, 1);
-  const dirTeam = sc.dir === "home" ? m.home : (sc.dir === "away" ? m.away : null);
 
   // após 85' de jogo não se sugere mais entradas de gols (pouco tempo restante)
   const lateGame = m.minute > 85;
@@ -671,15 +670,10 @@ function suggestEntry(m, sc) {
     });
   }
 
-  // próximo gol: dominância clara + pressão (indicadores RoboBet Fire/Ball/Combo ou momentum alto) — nunca após 85'
-  if (!lateGame && dirTeam && sc.dirStrength >= 0.62 && (sc.fire || sc.ball || sc.combo || (sc.components.mom || 0) >= 68)) {
-    out.push({ type: "next_goal", label: `Próximo gol — ${dirTeam}`, odd: null, prob: null, prio: 3 });
-  }
-
   out.sort((a, b) => b.prio - a.prio);
   const primary = out[0] || null;
   const strong = primary && (sc.score >= 85) && (primary.type !== "goals" || primary.prob >= 70);
-  return { entries: out.slice(0, 3), primary, strong, dirTeam, goals, cornersExp };
+  return { entries: out.slice(0, 3), primary, strong, goals, cornersExp };
 }
 
 function buildReason(m, sc, sug) {
@@ -1217,8 +1211,14 @@ function renderActive() {
     const prev = seen.get(key);
     if (!prev || h.ts > prev.ts) seen.set(key, { h, m });
   }
+  // abertas (result == null) primeiro; entre elas, por score do jogo
   const entries = [...seen.values()]
-    .sort((a, b) => ((b.m._sc && b.m._sc.score) || 0) - ((a.m._sc && a.m._sc.score) || 0));
+    .sort((a, b) => {
+      const aOpen = a.h.result == null ? 0 : 1;
+      const bOpen = b.h.result == null ? 0 : 1;
+      if (aOpen !== bOpen) return aOpen - bOpen;
+      return ((b.m._sc && b.m._sc.score) || 0) - ((a.m._sc && a.m._sc.score) || 0);
+    });
   if (!entries.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
   $("active-count").textContent =
