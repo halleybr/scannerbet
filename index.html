@@ -685,13 +685,14 @@ function suggestEntry(m, sc) {
 
   // escanteios: mercado aberto + pressão real do gráfico de cantos
   // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte).
-  // Só no 2º tempo, a partir dos 70', e com o gráfico confirmando subida de um dos times.
+  // Não espera os 70': basta ~15 min do início do 2º tempo (~60') com o gráfico
+  // de cantos mostrando pressão (subida de um dos times ou sinal forte).
   const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
   // sinal forte do gráfico de cantos dispensa o gate do componente de escanteios
   const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
-  if (m.minute >= 70 && sc.xcRising && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
+  if (m.minute >= 60 && (sc.xcRising || cpStrong) && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
     // enquanto houver uma entrada de escanteio ABERTA (sem green) no mesmo jogo, não envia outra
     const openCorners = state.history.some(h =>
       h.result == null && /^Mais escanteios/.test(h.market) && sameMatch(h, m));
