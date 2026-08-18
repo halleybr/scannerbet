@@ -675,20 +675,26 @@ function analyze(m) {
   // ---- Eficiência de conversão (baseada em xG + finalização) ----
   const goalsTotal = (numOrNull(H.goals) ?? 0) + (numOrNull(A.goals) ?? 0);
   const shotsOnTarget = sot;
+  const totalShots = shots;
+  
   // Eficiência clássica: gols / chutes no alvo
   const efficiency = shotsOnTarget > 0 ? goalsTotal / shotsOnTarget : 0;
   // Eficiência xG: gols reais vs xG esperado (>1.0 = sobreperformance)
   const xgEfficiency = xgAvail && (xgH + xgA) > 0 ? goalsTotal / (xgH + xgA) : null;
-  // Indicadores de alta eficiência:
-  // 1) Conversão clássica >30% (time clínico)
-  // 2) xG efficiency >1.2 (marcando MAIS do que o esperado)
-  // 3) xG rising + conversão >25% (pressão aumentando e convertendo)
-  const classicHigh = efficiency >= 0.30 && goalsTotal >= 1 && minute >= 20;
-  const xgHigh = xgEfficiency != null && xgEfficiency >= 1.2 && goalsTotal >= 1 && minute >= 20;
-  const risingEfficient = res.xgRising && efficiency >= 0.25 && goalsTotal >= 1 && minute >= 30;
+  // xG por chute: qualidade das oportunidades (média top5 = 0.09-0.10)
+  const xgPerShot = xgAvail && totalShots > 0 ? (xgH + xgA) / totalShots : null;
+  
+  // Indicadores de alta eficiência (baseados em benchmarks reais):
+  // 1) Conversão clássica >25% + xG rising (clínico e pressão crescente)
+  // 2) xG efficiency >1.0 + xG por chute >0.12 (sobreperformance + oportunidades de qualidade)
+  // 3) xG rising + conversão >20% + ≥2 gols (jogo com gols e pressão)
+  const classicHigh = efficiency >= 0.25 && goalsTotal >= 1 && minute >= 20 && res.xgRising;
+  const xgHigh = xgEfficiency != null && xgEfficiency >= 1.0 && xgPerShot != null && xgPerShot >= 0.12 && goalsTotal >= 1 && minute >= 20;
+  const risingEfficient = res.xgRising && efficiency >= 0.20 && goalsTotal >= 2 && minute >= 30;
   const highEfficiency = classicHigh || xgHigh || risingEfficient;
   res.efficiency = round2(efficiency);
   res.xgEfficiency = xgEfficiency ? round2(xgEfficiency) : null;
+  res.xgPerShot = xgPerShot ? round2(xgPerShot) : null;
   res.goalsTotal = goalsTotal;
   res.highEfficiency = highEfficiency;
 
@@ -928,6 +934,7 @@ function maybeAlerts() {
       if (!dup) {
         const parts = [`${Math.round(sc.efficiency * 100)}% conversão`];
         if (sc.xgEfficiency != null) parts.push(`xG eff: ${sc.xgEfficiency}x`);
+        if (sc.xgPerShot != null) parts.push(`xG/chute: ${sc.xgPerShot}`);
         if (sc.xgRising) parts.push('📈 xG subindo');
         state.alerts.unshift({
           t: "detected", at: now,
