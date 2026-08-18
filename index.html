@@ -273,7 +273,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T02:55-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T03:10-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -654,19 +654,24 @@ function suggestEntry(m, sc) {
   const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
   if (m.minute >= 70 && sc.xcRising && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
-    let line = null;
-    if (cornersExp != null) {
-      line = Math.floor(cornersExp) + 1.5; // projeção + 1 escanteio a mais
-    } else if (sc.xcMom >= 0.4) {
-      line = sc.num.corners + 1.5; // pressão forte → atual + 1 escanteio extra
+    // enquanto houver uma entrada de escanteio ABERTA (sem green) no mesmo jogo, não envia outra
+    const openCorners = state.history.some(h =>
+      h.result == null && /^Mais escanteios/.test(h.market) && sameMatch(h, m));
+    if (!openCorners) {
+      let line = null;
+      if (cornersExp != null) {
+        line = Math.floor(cornersExp) + 1.5; // projeção + 1 escanteio a mais
+      } else if (sc.xcMom >= 0.4) {
+        line = sc.num.corners + 1.5; // pressão forte → atual + 1 escanteio extra
+      }
+      if (line != null && sc.num.corners >= line) line = sc.num.corners + 1.5; // nunca abaixo do atual + 1
+      out.push({
+        type: "corners",
+        label: line != null ? `Mais escanteios — Over ${fmt(line, 1)}` : "Mais escanteios",
+        odd: null, prob: null,
+        prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
+      });
     }
-    if (line != null && sc.num.corners >= line) line = sc.num.corners + 1.5; // nunca abaixo do atual + 1
-    out.push({
-      type: "corners",
-      label: line != null ? `Mais escanteios — Over ${fmt(line, 1)}` : "Mais escanteios",
-      odd: null, prob: null,
-      prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
-    });
   }
 
   out.sort((a, b) => b.prio - a.prio);
@@ -862,6 +867,22 @@ function dedupeHistory() {
   if (kept.size !== state.history.length) {
     state.history = state.history.filter(h => kept.has(h));
     save();
+  }
+  // colapsa entradas de escanteio abertas do mesmo jogo: mantém apenas a mais recente
+  // (a linha sobe com o gráfico; o que vale é a aposta atual em aberto)
+  const openCorners = state.history.filter(h => h.result == null && /^Mais escanteios/.test(h.market));
+  if (openCorners.length > 1) {
+    const newest = new Map();
+    for (const h of openCorners) {
+      const key = h.match + "|corners";
+      const cur = newest.get(key);
+      if (!cur || h.ts > cur.ts) newest.set(key, h);
+    }
+    const drop = new Set(openCorners.filter(h => newest.get(h.match + "|corners") !== h));
+    if (drop.size) {
+      state.history = state.history.filter(h => !drop.has(h));
+      save();
+    }
   }
 }
 
