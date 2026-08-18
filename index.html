@@ -909,14 +909,12 @@ function ensureEntry(m, sc, sug) {
     minute: m.time || (m.minute + "'"),
     market: sug.primary.label,
     odd: sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D",
+    prob: sug.primary.prob != null ? Math.round(sug.primary.prob) : null,
     score: sc.score,
     detGoals: { h: m.scoreHome, a: m.scoreAway },   // placar no momento da detecção
     result: null,
+    tgSent: false, // Telegram só é enviado quando a entrada é publicada nas ENTRADAS ATIVAS
   });
-  // Telegram: avisa quando a entrada é aberta (confirmada nas ENTRADAS ATIVAS)
-  if (tg.enabled && tg.fwdDetected) {
-    tgPush(`🟢 ENTRADA ABERTA\n⚽ ${m.home} x ${m.away} (${m.league})\n⏱ ${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}\n🎯 ${sug.primary.label}\n💰 Odd: ${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}${sug.primary.prob != null ? " · Prob. " + Math.round(sug.primary.prob) + "%" : ""}\n🔥 Score: ${sc.score}/100`);
-  }
 }
 
 /* Resolve o resultado de uma entrada usando dados finais da própria RoboBet:
@@ -1303,6 +1301,15 @@ function renderActive() {
   $("active-count").textContent =
     entries.length + (entries.length === 1 ? " entrada ativa" : " entradas ativas") +
     " · removidas quando o jogo terminar";
+  // Telegram: só envia quando a aposta é PUBLICADA nas ENTRADAS ATIVAS (aberta e jogo ao vivo)
+  let sentAny = false;
+  for (const { h, m } of entries) {
+    if (h.result != null || h.tgSent || !tg.enabled || !tg.fwdDetected) continue;
+    tgPush(`🟢 ENTRADA ABERTA\n⚽ ${m.home} x ${m.away} (${m.league})\n⏱ ${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}\n🎯 ${h.market}\n💰 Odd: ${h.odd}${h.prob != null ? " · Prob. " + h.prob + "%" : ""}\n🔥 Score: ${(m._sc && m._sc.score) || h.score}/100`);
+    h.tgSent = true;
+    sentAny = true;
+  }
+  if (sentAny) save();
   const tb = $("active").querySelector("tbody");
   tb.innerHTML = entries.map(({ h, m }) => {
     const open = h.result == null;
@@ -1455,6 +1462,7 @@ function importHistory(input) {
       const arr = Array.isArray(data) ? data : (data.history || []);
       if (!Array.isArray(arr) || !arr.length) throw new Error("vazio");
       state.history = arr;
+      arr.forEach(x => x.tgSent = true); // restauradas não re-enviam alerta ao Telegram
       save();
       dedupeHistory();
       renderAll();
@@ -1494,7 +1502,11 @@ $("build").textContent = BUILD;
 /* auto-recuperação: se o histórico principal sumiu (storage limpo/restart) mas há backup, restaura */
 if (!state.history.length) {
   const bak = loadLS("rb_history_bak", []);
-  if (bak.length) { state.history = bak; save(); }
+  if (bak.length) {
+    state.history = bak;
+    bak.forEach(x => x.tgSent = true); // recuperadas não re-enviam alerta ao Telegram
+    save();
+  }
 }
 dedupeHistory();
 tick();
