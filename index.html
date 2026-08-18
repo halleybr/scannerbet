@@ -9,7 +9,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>⚽ ScannerGreen — Scanner de oportunidades ao vivo</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><circle cx=%2212%22 cy=%2212%22 r=%2210.6%22 fill=%22%23e8f5e9%22 stroke=%22%2322c55e%22 stroke-width=%221.7%22/><polygon points=%2212,7.6 14.7,9.6 13.7,12.9 10.3,12.9 9.3,9.6%22 fill=%22none%22 stroke=%22%2322c55e%22 stroke-width=%221.2%22/><path d=%22M12 7.6 L12 2.2 M14.7 9.6 L19.4 6.6 M13.7 12.9 L18.2 15.8 M10.3 12.9 L5.8 15.8 M9.3 9.6 L4.6 6.6%22 stroke=%22%2322c55e%22 stroke-width=%221.2%22 fill=%22none%22/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><defs><radialGradient id=%22g%22 cx=%2235%25%22 cy=%2230%25%22 r=%2285%25%22><stop offset=%220%22 stop-color=%22%23ffffff%22/><stop offset=%22.45%22 stop-color=%22%23e8f5e9%22/><stop offset=%221%22 stop-color=%22%2386efac%22/></radialGradient></defs><circle cx=%2212%22 cy=%2212%22 r=%2210.6%22 fill=%22url(%23g)%22 stroke=%22%2316a34a%22 stroke-width=%221.6%22/><path d=%22M12 12 L12 2.2 A9.8 9.8 0 0 1 20.49 7.1 Z%22 fill=%22%2322c55e%22 opacity=%22.32%22/><polygon points=%2212,6.8 15.3,9.2 14.1,13 9.9,13 8.7,9.2%22 fill=%22%2316a34a%22/><path d=%22M12 6.8 L12 1.6 M15.3 9.2 L20.3 6.3 M14.1 13 L18.6 16.2 M9.9 13 L5.4 16.2 M8.7 9.2 L3.7 6.3%22 stroke=%22%2316a34a%22 stroke-width=%221.2%22 stroke-linecap=%22round%22/><circle cx=%228%22 cy=%227.4%22 r=%221.5%22 fill=%22%23ffffff%22 opacity=%22.75%22/></svg>">
 <style>
   :root{
     --bg:#0b0f19; --panel:#111827; --panel2:#0f172a; --line:#1f2937;
@@ -157,7 +157,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><span class="logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10.6" fill="#e8f5e9" stroke="#22c55e" stroke-width="1.7"/><polygon points="12,7.6 14.7,9.6 13.7,12.9 10.3,12.9 9.3,9.6" fill="none" stroke="#22c55e" stroke-width="1.2"/><path d="M12 7.6 L12 2.2 M14.7 9.6 L19.4 6.6 M13.7 12.9 L18.2 15.8 M10.3 12.9 L5.8 15.8 M9.3 9.6 L4.6 6.6" stroke="#22c55e" stroke-width="1.2" fill="none"/></svg></span><span class="live">ScannerGreen</span>
+    <h1><span class="logo" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><defs><radialGradient id="sg-grad" cx="35%" cy="30%" r="85%"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#e8f5e9"/><stop offset="1" stop-color="#86efac"/></radialGradient></defs><circle cx="12" cy="12" r="10.6" fill="url(#sg-grad)" stroke="#16a34a" stroke-width="1.6"/><path d="M12 12 L12 2.2 A9.8 9.8 0 0 1 20.49 7.1 Z" fill="#22c55e" opacity=".32"/><polygon points="12,6.8 15.3,9.2 14.1,13 9.9,13 8.7,9.2" fill="#16a34a"/><path d="M12 6.8 L12 1.6 M15.3 9.2 L20.3 6.3 M14.1 13 L18.6 16.2 M9.9 13 L5.4 16.2 M8.7 9.2 L3.7 6.3" stroke="#16a34a" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="7.4" r="1.5" fill="#ffffff" opacity=".75"/></svg></span><span class="live">ScannerGreen</span>
       <small>gráficos ao vivo (xG, momentum, escanteios, chutes)</small>
     </h1>
     <div class="hud">
@@ -273,7 +273,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T02:40-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T02:55-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
