@@ -671,6 +671,18 @@ function analyze(m) {
   res.components = comps;
   res.score = score;
   res.valid = score > 0 && score >= MIN_SCORE;
+
+  // ---- Eficiência de conversão (gols por finalização) ----
+  const goalsTotal = (numOrNull(H.goals) ?? 0) + (numOrNull(A.goals) ?? 0);
+  const shotsOnTarget = sot;
+  // Eficiência = gols / chutes no alvo (quanto maior, mais clínico)
+  const efficiency = shotsOnTarget > 0 ? goalsTotal / shotsOnTarget : 0;
+  // Time com alta eficiência: >30% de conversão (1 gol a cada 3 chutes no alvo)
+  const highEfficiency = efficiency >= 0.30 && goalsTotal >= 1 && minute >= 20;
+  res.efficiency = round2(efficiency);
+  res.goalsTotal = goalsTotal;
+  res.highEfficiency = highEfficiency;
+
   return res;
 }
 
@@ -898,6 +910,18 @@ function maybeAlerts() {
           t: "lost", at: now,
           title: `OPORTUNIDADE PERDEU FORÇA — ${m.home} x ${m.away}`,
           body: `Score caiu de ${prev.score}/100 para ${score}/100 (${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}).`,
+        });
+      }
+    }
+    // Alerta de alta eficiência de conversão (time clínico)
+    if (sc.highEfficiency && !sc.goalAlert) {
+      const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('EFICIÊNCIA') && Math.abs(a.at - now) < 5 * 60_000);
+      if (!dup) {
+        const team = (numOrNull(H.goals) ?? 0) >= (numOrNull(A.goals) ?? 0) ? m.home : m.away;
+        state.alerts.unshift({
+          t: "detected", at: now,
+          title: `⚽ GOLS — ALTA EFICIÊNCIA — ${m.home} x ${m.away}`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${team} converteu ${Math.round(sc.efficiency * 100)}% dos chutes no alvo (${sc.goalsTotal} gols / ${sc.num.sot} no alvo) · Score ${(sc.score)}/100`,
         });
       }
     }
