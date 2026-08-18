@@ -1178,6 +1178,23 @@ function renderAll() {
   const opps = matches.filter(m => m._sc && m._sc.valid).sort((a, b) => b._sc.score - a._sc.score || b.minute - a.minute);
   const live = matches.filter(m => m.time !== "FT" && m.period !== "FT");
 
+  // Jogos com entrada ativa (aberta) aparecem em Detalhes mesmo sem score >= 70
+  const activeMatchIds = new Set();
+  const liveByName2 = new Map();
+  for (const m of live) liveByName2.set(m.home + " x " + m.away, m);
+  for (const h of state.history) {
+    if (h.result != null) continue;
+    const m2 = (h.id != null && state.matches.has(h.id)) ? state.matches.get(h.id) : liveByName2.get(h.match) || null;
+    if (m2 && !opps.find(o => o.id === m2.id)) { activeMatchIds.add(m2.id); opps.push(m2); }
+  }
+  // Re-sort: jogos com entrada ativa ficam primeiro
+  opps.sort((a, b) => {
+    const aA = activeMatchIds.has(a.id) ? 0 : 1;
+    const bA = activeMatchIds.has(b.id) ? 0 : 1;
+    if (aA !== bA) return aA - bA;
+    return (b._sc && b._sc.score || 0) - (a._sc && a._sc.score || 0);
+  });
+
   $("hud-live").textContent = String(live.length);
   $("hud-updated").textContent = new Date().toLocaleTimeString("pt-BR");
 
@@ -1363,16 +1380,27 @@ function renderOpps85() {
   }).join("");
 }
 
+function hScore(m) {
+  const h = state.history.find(h => !h.result && (h.id === m.id || h.match === m.home + ' x ' + m.away));
+  return h ? h.score : 0;
+}
+
 function renderCards(opps) {
   const sec = $("cards-sec"), box = $("cards");
-  if (!opps.length) { sec.style.display = "none"; return; }
+  // Filtra: só entra quem tem _sc OU entrada ativa no histórico
+  const visible = opps.filter(m => m._sc || state.history.some(h => !h.result && (h.id === m.id || h.match === m.home + ' x ' + m.away)));
+  if (!visible.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
-  box.innerHTML = opps.map((m, i) => {
-    const sc = m._sc, sug = m._sug;
-    const conf = sc.score >= 85 ? `<span class="conf high">Confiança: Alta</span>` : `<span class="conf mid">Confiança: Média</span>`;
+  box.innerHTML = visible.map((m, i) => {
+    const sc = m._sc;
+    const sug = m._sug;
+    // Entrada ativa do histórico (quando o jogo não está mais como oportunidade)
+    const activeH = !sug ? (state.history.find(h => !h.result && (h.id === m.id || h.match === m.home + ' x ' + m.away)) || null) : null;
+    const score = sc ? sc.score : (activeH ? activeH.score : 0);
+    const conf = score >= 85 ? `<span class="conf high">Confiança: Alta</span>` : `<span class="conf mid">Confiança: Média</span>`;
     const strength = sug && sug.strong ? `<span class="strong">🟢 ENTRADA FORTE</span>` : `<span class="interest">🟡 ENTRADA INTERESSANTE</span>`;
     const alts = sug ? sug.entries.slice(1) : [];
-    const c = sc.components;
+    const c = sc ? sc.components : null;
     return `<div class="card">
       <div class="top"><div>
         <div class="leag">${esc(m.league)}</div>
@@ -1380,15 +1408,15 @@ function renderCards(opps) {
       </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
       <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))} · Placar: ${m.scoreHome} x ${m.scoreAway}${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
       <div class="stats">
-        <div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : '<span class="nd">N/D</span>'}</span></div>
+        ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}</span></div>
         <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
         <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
         <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">🧭 Posse</span><span class="v">${sc.num.possH != null ? sc.num.possH + "% x " + (100 - sc.num.possH) + "%" : '<span class="nd">N/D</span>'}</span></div>
-        <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta", sc.goalAlert && "Goal alert"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
+        <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta", sc.goalAlert && "Goal alert"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>` : '<div style="padding:8px;color:var(--dim)">📊 Dados detalhados indisponíveis neste momento</div>'}
       </div>
-      ${sparkline(m)}
+      ${sc ? sparkline(m) : ''}
       ${sug && !sug.primary ? `<div class="entry"><div class="lab">Possível entrada</div><div class="mk"><span class="interest">Nenhum mercado com linha/odd favorável agora — monitorando.</span></div></div>` : ""}
       ${sug && sug.primary ? `<div class="entry has">
         <div class="lab">Possível entrada · ${strength}</div>
@@ -1396,8 +1424,13 @@ function renderCards(opps) {
         <div class="odds">Odd atual: <b>${sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D"}</b>${sug.primary.prob != null ? ` · Prob. do modelo: <b>${Math.round(sug.primary.prob)}%</b>` : ""} ${conf}</div>
         ${alts.length ? `<div class="odds" style="margin-top:3px">Alternativas: ${alts.map(a => esc(a.label)).join(" · ")}</div>` : ""}
       </div>` : ""}
+      ${activeH ? `<div class="entry has">
+        <div class="lab">🎯 Entrada ativa</div>
+        <div class="mk">🟢 ${esc(activeH.market)}</div>
+        <div class="odds">Odd: <b>${activeH.odd}</b> · Score: ${activeH.score}/100</div>
+      </div>` : ""}
       ${m._reason ? `<div class="why"><b>Motivo:</b> ${esc(m._reason)}</div>` : ""}
-      <div class="why" style="margin-top:4px;font-size:11px;color:var(--dim)">${c.xg != null ? `xG ${c.xg}/100 · ` : ""}${c.mom != null ? `Momentum ${c.mom}/100 · ` : ""}Esc ${c.corners}/100 · Chutes ${c.shots}/100 · Ataq. ${c.dang}/100</div>
+      ${c ? `<div class="why" style="margin-top:4px;font-size:11px;color:var(--dim)">${c.xg != null ? `xG ${c.xg}/100 · ` : ""}${c.mom != null ? `Momentum ${c.mom}/100 · ` : ""}Esc ${c.corners}/100 · Chutes ${c.shots}/100 · Ataq. ${c.dang}/100</div>` : ""}
     </div>`;
   }).join("");
 }
