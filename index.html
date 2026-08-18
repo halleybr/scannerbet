@@ -548,23 +548,17 @@ function analyze(m) {
   res.xgRising = xgAvail && (m.xgPrev == null || round2(xgH + xgA) >= m.xgPrev);
   if (xgAvail) m.xgPrev = round2(xgH + xgA);
 
-  // --- Detecção de chutes no alvo subindo entre tempos ---
-  let sot1T = 0, sot2T = 0, sotRising = false;
-  const t1 = st["1t"], t2 = st["2t"];
-  if (t1 && t2 && t1.home && t1.away && t2.home && t2.away) {
-    sot1T = (numOrNull(t1.home.on_target) ?? 0) + (numOrNull(t1.away.on_target) ?? 0);
-    sot2T = (numOrNull(t2.home.on_target) ?? 0) + (numOrNull(t2.away.on_target) ?? 0);
-    // Chutes no alvo subindo: 2T tem mais chutes por minuto que 1T
-    const minute2T = Math.max(minute - 45, 1);
-    const pace1T = sot1T / 45;  // ritmo do 1T (45 min)
-    const pace2T = sot2T / minute2T;  // ritmo do 2T
-    sotRising = pace2T > pace1T * 1.2 && sot2T >= 3; // 20% mais rápido + pelo menos 3 chutes no 2T
-    res.sot1T = sot1T;
-    res.sot2T = sot2T;
-    res.sotRising = sotRising;
-    res.sotPace1T = round2(pace1T);
-    res.sotPace2T = round2(pace2T);
-  }
+  // --- Detecção de tendência de chutes subindo no jogo ---
+  // Compara com valores anteriores para detectar se chutes estão aumentando
+  const prevShots = m.prevShots || 0;
+  const prevSot = m.prevSot || 0;
+  const shotsRising = prevShots > 0 && shots > prevShots + 2; // subiu mais de 2 chutes
+  const sotRising = prevSot > 0 && sot > prevSot + 1; // subiu mais de 1 chute no alvo
+  // Armazenar para próxima comparação
+  m.prevShots = shots;
+  m.prevSot = sot;
+  res.shotsRising = shotsRising;
+  res.sotRising = sotRising;
 
   /* ---- xG (30 pts) ---- */
   let xgScore = 0;
@@ -1024,16 +1018,19 @@ function maybeAlerts() {
         });
       }
     }
-    // Alerta de chutes no alvo subindo (2T mais intenso que 1T)
-    if (sc.sotRising && m.minute >= 50 && !lateGame) {
+    // Alerta de chutes subindo no jogo
+    if ((sc.shotsRising || sc.sotRising) && m.minute >= 10 && !lateGame) {
       const sug = m._sug;
       const hasGoalEntry = sug && sug.entries && sug.entries.some(e => e.type === 'goals');
       const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('CHUTES') && Math.abs(a.at - now) < 5 * 60_000);
       if (!dup && hasGoalEntry) {
+        const parts = [];
+        if (sc.shotsRising) parts.push(`chutes: ${sc.num.shots}`);
+        if (sc.sotRising) parts.push(`no alvo: ${sc.num.sot}`);
         state.alerts.unshift({
           t: "detected", at: now,
           title: `🎯 CHUTES SUBINDO — ${m.home} x ${m.away}`,
-          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · 1T: ${sc.sot1T} chutes (${sc.sotPace1T}/min) → 2T: ${sc.sot2T} (${sc.sotPace2T}/min) · Score ${sc.score}/100`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} · Score ${sc.score}/100`,
         });
       }
     }
@@ -1606,7 +1603,7 @@ function renderCards(opps) {
         ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : (sc.estXG != null ? `~${fmt(sc.estXG)} <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">estimado</span>${sc.estXgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">📈 subindo</span>' : ''}` : '<span class="nd">N/D</span>')}</span></div>
         <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}${sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.4 ? ` <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">entry ${Math.round(sc.momentumEntryScore * 100)}%</span>` : ''}</span></div>
         <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
-        <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}${sc.sotRising ? ` <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">📈 subindo</span>` : ''}</span></div>
+        <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}${sc.sotRising || sc.shotsRising ? ` <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">📈 subindo</span>` : ''}</span></div>
         <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">🧭 Posse</span><span class="v">${sc.num.possH != null ? sc.num.possH + "% x " + (100 - sc.num.possH) + "%" : '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta", sc.goalAlert && "Goal alert"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>` : '<div style="padding:8px;color:var(--dim)">📊 Dados detalhados indisponíveis neste momento</div>'}
