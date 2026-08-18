@@ -468,10 +468,10 @@ function estimateInjuryTime(m) {
   const minute = m.minute;
   
   // Só mostrar estimativa nos momentos certos:
-  // 1T: a partir dos 44 minutos (antes do HT)
-  // 2T: a partir dos 88 minutos (antes do FT)
-  if (!is2T && minute < 44) return null;  // 1T antes dos 44' → nada
-  if (is2T && minute < 88) return null;   // 2T antes dos 88' → nada
+  // 1T: a partir dos 40 minutos (antes do HT)
+  // 2T: a partir dos 85 minutos (antes do FT)
+  if (!is2T && minute < 40) return null;  // 1T antes dos 40' → nada
+  if (is2T && minute < 85) return null;   // 2T antes dos 85' → nada
   // No HT (period=HT) ouFT → não mostrar nada (já acabou ou vai reiniciar)
   if (m.period === 'HT' || m.period === 'FT') return null;
   
