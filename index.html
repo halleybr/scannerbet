@@ -459,6 +459,47 @@ function applyTodayOverlay(today) {
   state.todayForecast = fmap;
 }
 
+/* ---------------- estimativa de acréscimos ---------------- */
+function estimateInjuryTime(m) {
+  // Se já tem injuryTime oficial da API, usar ele
+  if (m.injuryTime != null) return { min: m.injuryTime, official: true };
+  const ls = m.liveStats;
+  if (!ls) return null;
+  // Usar timeline para contar eventos do semi-time atual (mais preciso)
+  const is2T = m.period === '2T' || m.minute > 45;
+  const timeline = ls.timeline || [];
+  // Filtrar eventos do semi-time atual (2T ou 1T)
+  const currentHalfEvents = timeline.filter(ev =>
+    is2T ? ev.is_second_half : ev.is_first_half
+  );
+  const goals = currentHalfEvents.filter(ev => ev.is_goal).length;
+  const subs = currentHalfEvents.filter(ev => ev.is_substitution).length;
+  const cards = currentHalfEvents.filter(ev => ev.is_card || ev.is_disciplinary).length;
+  // Se não tem timeline, usar stats (menos preciso)
+  let g2 = goals, s2 = subs, c2 = cards;
+  if (timeline.length === 0 && ls.stats && ls.stats.ft) {
+    const ft = ls.stats.ft;
+    const h = ft.home || {}, a = ft.away || {};
+    g2 = (h.goals || 0) + (a.goals || 0);
+    s2 = (h.substitutions || 0) + (a.substitutions || 0);
+    c2 = (h.yellow_cards || 0) + (a.yellow_cards || 0) + (h.red_cards || 0) + (a.red_cards || 0);
+  }
+  // Se não tem nenhum dado, usar base mínima
+  if (g2 === 0 && s2 === 0 && c2 === 0 && timeline.length === 0) return null;
+  // Fórmula FIFA-style (base menor agora que usamos timeline)
+  const base = is2T ? 3 : 2;
+  const est = base + (g2 * 1.5) + (s2 * 0.5) + (c2 * 0.5);
+  // Se o jogo já está além do tempo regulamentar, ajustar
+  const regMin = is2T ? 90 : 45;
+  const already = Math.max(0, m.minute - regMin);
+  const final = Math.max(est, already + 1);
+  return {
+    min: Math.round(final),
+    official: false,
+    goals: g2, subs: s2, cards: c2, base
+  };
+}
+
 /* ---------------- análise / pontuação ---------------- */
 function analyze(m) {
   const ls = m.liveStats;
@@ -1407,7 +1448,7 @@ function renderCards(opps) {
         <div class="leag">${esc(m.league)}</div>
         <div class="vs">${esc(m.home)} x ${esc(m.away)}</div>
       </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
-      <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))}${m.injuryTime ? ' <span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.35)">+' + m.injuryTime + ' min acréscimo</span>' : ''} · Placar: ${m.scoreHome} x ${m.scoreAway}${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
+      <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))}${(() => { const inj = estimateInjuryTime(m); if (!inj) return ''; const tag = inj.official ? '✅ +' + inj.min : '⏱ +' + inj.min + ' (est.)'; const bg = inj.official ? 'rgba(34,197,94,.15)' : 'rgba(251,191,36,.15)'; const col = inj.official ? '#4ade80' : '#fbbf24'; const bdr = inj.official ? 'rgba(34,197,94,.35)' : 'rgba(251,191,36,.35)'; return ' <span class="badge" style="background:' + bg + ';color:' + col + ';border-color:' + bdr + '">' + tag + '</span>'; })()} · Placar: ${m.scoreHome} x ${m.scoreAway}${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
       <div class="stats">
         ${sc ? `<div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}</span></div>
