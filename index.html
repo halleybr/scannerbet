@@ -273,7 +273,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T00:05-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T01:25-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -372,6 +372,9 @@ async function tick() {
       resolveFinished(gone);
       state.matches.delete(id);
     }
+    // varre entradas pendentes de jogos fora do inplay (cobre partidas que
+    // terminaram com a página fechada ou que o /events/today ainda não marcou)
+    resolveGoneFromInplay(ids);
 
     for (const e of live) {
       const ls = stats.get(e.id);
@@ -531,6 +534,15 @@ function analyze(m) {
   res.xcMom = round2(xc);
   res.forceMax = round1(force);
   res.cornersChart = cp ? { threshold: numOrNull(cp.threshold) ?? 8 } : null;
+  // subida no gráfico: xc-momentum de um dos times crescendo nos últimos minutos
+  res.xcRising = false;
+  if (cp && Array.isArray(cp.timeline) && cp.timeline.length >= 3) {
+    const tl = cp.timeline;
+    const last = tl[tl.length - 1], prev = tl[Math.max(0, tl.length - 6)];
+    const dH = (numOrNull(last.xc_momentum_home) ?? 0) - (numOrNull(prev.xc_momentum_home) ?? 0);
+    const dA = (numOrNull(last.xc_momentum_away) ?? 0) - (numOrNull(prev.xc_momentum_away) ?? 0);
+    res.xcRising = dH > 0.15 || dA > 0.15;
+  }
 
   /* ---- Chutes / chutes no alvo (15 pts) ---- */
   const shotsPace = shots / Math.min(minute, 90);
@@ -607,6 +619,8 @@ function suggestEntry(m, sc) {
   const minute = Math.max(m.minute, 1);
   const dirTeam = sc.dir === "home" ? m.home : (sc.dir === "away" ? m.away : null);
 
+  // após 85' de jogo não se sugere mais entradas de gols (pouco tempo restante)
+  const lateGame = m.minute > 85;
   const goalCands = [
     { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1, need: 1, minXg: 0.60 },
     { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2, need: 2, minXg: 1.30 },
@@ -614,6 +628,7 @@ function suggestEntry(m, sc) {
   ];
   for (const c of goalCands) {
     if (!c.still) continue;
+    if (lateGame) continue;
     const o = over[c.key];
     const fProb = o ? numOrNull(o.probability) : null;
     const fOdd = o ? numOrNull(o.market_odd) : null;
@@ -632,13 +647,14 @@ function suggestEntry(m, sc) {
   }
 
   // escanteios: mercado aberto + pressão real do gráfico de cantos
-  // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte)
+  // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte).
+  // Só no 2º tempo, a partir dos 70', e com o gráfico confirmando subida de um dos times.
   const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
   // sinal forte do gráfico de cantos dispensa o gate do componente de escanteios
   const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
-  if (m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
+  if (m.minute >= 70 && sc.xcRising && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
     let line = null;
     if (cornersExp != null) {
       line = Math.floor(cornersExp) + 0.5;
@@ -655,8 +671,8 @@ function suggestEntry(m, sc) {
     });
   }
 
-  // próximo gol: dominância clara + pressão (indicadores RoboBet Fire/Ball/Combo ou momentum alto)
-  if (dirTeam && sc.dirStrength >= 0.62 && (sc.fire || sc.ball || sc.combo || (sc.components.mom || 0) >= 68)) {
+  // próximo gol: dominância clara + pressão (indicadores RoboBet Fire/Ball/Combo ou momentum alto) — nunca após 85'
+  if (!lateGame && dirTeam && sc.dirStrength >= 0.62 && (sc.fire || sc.ball || sc.combo || (sc.components.mom || 0) >= 68)) {
     out.push({ type: "next_goal", label: `Próximo gol — ${dirTeam}`, odd: null, prob: null, prio: 3 });
   }
 
@@ -923,14 +939,13 @@ function queueFinalsFetch(h) {
         h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
         cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
       };
-      let any = false;
-      for (const e of state.history) {
-        if (e.result || e.id !== h.id) continue;
-        resolveHistoryEntry(e, finals, null);
-        any = true;
-      }
-      if (any) save();
-    } catch { /* sem live-stats → a entrada fica em aberto */ }
+      let any = false;        for (const e of state.history) {
+          if (e.result || e.id !== h.id) continue;
+          resolveHistoryEntry(e, finals, null);
+          any = true;
+        }
+        if (any) { save(); renderAll(); }
+      } catch { /* sem live-stats → a entrada fica em aberto */ }
     finally { finalsFetching.delete(h.id); }
   })();
 }
@@ -995,7 +1010,53 @@ async function resolveFinished(m) {
     resolveHistoryEntry(h, finals, names);
     any = true;
   }
-  if (any) save();
+  if (any) { save(); renderAll(); }
+}
+
+/* Entradas pendentes de jogos que saíram do inplay: a RoboBet pode demorar a
+   marcar a partida como finished no /events/today, então resolve pelo live-stats
+   final (event.status === "finished") — cobre também jogos que terminaram com a
+   página fechada ou recarregada. Sempre que o jogo não está mais no inplay, é
+   candidato: fetch único por id, com nova tentativa a cada 15 min se ainda não acabou. */
+const goneFetching = new Set();
+function resolveGoneFromInplay(liveIds) {
+  const live = new Set(liveIds);
+  for (const h of state.history) {
+    if (h.result || h.id == null) continue;
+    if (live.has(h.id)) continue;              // ainda ao vivo
+    if (state.finishedScores[h.id]) continue;  // já resolvido pelo /events/today
+    if (h._tryAt && h._tryAt > Date.now()) continue;
+    h._tryAt = Date.now() + 15 * 60_000;
+    if (goneFetching.has(h.id)) continue;
+    goneFetching.add(h.id);
+    (async () => {
+      try {
+        const ls = await fetchJSON(`${API}/events/${h.id}/live-stats`, 20000, 1);
+        if (!ls || !ls.event || ls.event.status !== "finished") return; // ainda não terminou
+        const st = ls.stats;
+        const ft = st && (st.ft || st["2t"]);
+        if (!ft || !ft.home || !ft.away || numOrNull(ft.home.goals) == null) return;
+        const ev = ls.event;
+        const parts = h.match.split(" x ");
+        const finals = {
+          h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
+          cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+        };
+        const names = {
+          home: (ev.home_team && ev.home_team.name) || parts[0],
+          away: (ev.away_team && ev.away_team.name) || parts[1],
+        };
+        let any = false;
+        for (const e of state.history) {
+          if (e.result || e.id !== h.id) continue;
+          resolveHistoryEntry(e, finals, names);
+          any = true;
+        }
+        if (any) { save(); renderAll(); }
+      } catch { /* fica em aberto; nova tentativa após o intervalo */ }
+      finally { goneFetching.delete(h.id); }
+    })();
+  }
 }
 
 /* Resolve retroativamente entradas cujo jogo terminou (inclusive com a página
