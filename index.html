@@ -55,18 +55,17 @@
     animation:blinkDot 1.5s ease-in-out infinite}
   @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 10px rgba(239,68,68,0)}}
   @keyframes blinkDot{0%,100%{opacity:1}50%{opacity:.35}}
-  /* alerts (tabela fina ao lado) */
-  .alerts-tbl{width:100%;border-collapse:collapse;font-size:11.5px;min-width:0;
-    border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .alerts-tbl td{padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  /* alerts (tabela em largura total, abaixo dos detalhes) */
+  .alerts-tbl{width:100%;border-collapse:collapse;font-size:12.5px;min-width:0}
+  .alerts-tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
   .alerts-tbl tr:last-child td{border-bottom:none}
   .alerts-tbl tr.detected td{background:rgba(34,197,94,.05)}
   .alerts-tbl tr.lost td{background:rgba(239,68,68,.05)}
-  .alerts-tbl .a-time{color:var(--dim);font-size:10.5px;white-space:nowrap;padding-top:9px}
-  .alerts-tbl .a-tag{font-weight:700;font-size:10.5px;letter-spacing:.4px;white-space:nowrap}
+  .alerts-tbl .a-time{color:var(--dim);font-size:11px;white-space:nowrap}
+  .alerts-tbl .a-tag{font-weight:700;font-size:11px;letter-spacing:.4px;white-space:nowrap}
   .alerts-tbl .a-tag.detected{color:var(--green)}
   .alerts-tbl .a-tag.lost{color:var(--red)}
-  .alerts-tbl .a-title{color:var(--text);font-weight:600;margin-top:3px}
+  .alerts-tbl .a-title{color:var(--text);font-weight:600;margin-top:2px}
   .alerts-tbl .a-body{color:var(--muted);margin-top:2px;line-height:1.45}
   .alerts-tbl .a-body b{color:var(--text)}
   /* oportunidades 85+ (tabelas compactas em 3-4 colunas) */
@@ -129,6 +128,9 @@
   details[open] summary{border-bottom:1px solid var(--line)}
   details .tbl-wrap{border:none;border-radius:0 0 10px 10px}
   /* history */
+  .hist-wrap{max-height:400px;overflow-y:auto}
+  .hist-summary{font-size:11.5px;color:var(--muted);margin-bottom:8px}
+  .hist-summary b{color:var(--text)}
   .hres{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap}
   .hres.green{background:rgba(34,197,94,.15);color:#4ade80}
   .hres.red{background:rgba(239,68,68,.15);color:#f87171}
@@ -204,20 +206,22 @@
         <div class="opps85-grid" id="opps85"></div>
       </div>
 
-      <h2 class="destaque">🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100</span>
+      <h2 class="destaque">🔥 MELHORES JOGOS AO VIVO <span class="n">somente partidas com intensidade ≥ 70/100 e dica de entrada</span>
         <span class="hot" id="hot-badge" style="display:none"></span></h2>
       <div id="ranking"></div>
+
+      <section id="active-sec" style="display:none">
+        <h2>🎯 ENTRADAS ATIVAS <span class="n" id="active-count"></span></h2>
+        <div class="tbl-wrap"><table id="active"><thead>
+          <tr><th>Jogo</th><th>Min</th><th>Placar</th><th>Entrada</th><th>Odd</th><th>Score</th><th>Status</th></tr>
+        </thead><tbody></tbody></table></div>
+      </section>
 
       <section id="cards-sec" style="display:none">
         <h2>📋 DETALHES DAS OPORTUNIDADES</h2>
         <div class="cards" id="cards"></div>
       </section>
     </section>
-
-    <aside id="alerts-sec" style="display:none">
-      <h2>🚨 ALERTAS <span class="n">detectadas / perderam força</span></h2>
-      <table class="alerts-tbl"><tbody id="alerts"></tbody></table>
-    </aside>
   </div>
 
   <section>
@@ -230,9 +234,20 @@
     </details>
   </section>
 
+  <section id="alerts-sec" style="display:none">
+    <h2>🚨 ALERTAS <span class="n">detectadas / perderam força</span></h2>
+    <details>
+      <summary id="alerts-summary">Mostrar todos os alertas</summary>
+      <div class="tbl-wrap"><table class="alerts-tbl"><thead>
+        <tr><th>Horário</th><th>Status</th><th>Alerta</th></tr>
+      </thead><tbody id="alerts"></tbody></table></div>
+    </details>
+  </section>
+
   <section id="hist-sec" style="display:none">
     <h2>📒 ENTRADAS DETECTADAS <span class="n">histórico para avaliar o desempenho do modelo</span></h2>
-    <div class="tbl-wrap"><table id="hist"><thead>
+    <div class="hist-summary" id="hist-summary"></div>
+    <div class="tbl-wrap hist-wrap"><table id="hist"><thead>
       <tr><th>Horário</th><th>Jogo</th><th>Min</th><th>Mercado</th><th>Odd</th><th>Score</th><th>Resultado</th></tr>
     </thead><tbody></tbody></table></div>
   </section>
@@ -258,7 +273,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-17T20:23-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-18T00:05-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -349,7 +364,7 @@ async function tick() {
         ? fetchJSON(API + "/events/today", 30000, 2)
         : Promise.resolve(null),
     ]);
-    if (today) { applyTodayOverlay(today); state.todayLoaded = true; }
+    if (today) { applyTodayOverlay(today); resolveFinishedFromToday(); state.todayLoaded = true; }
 
     // remove jogos que terminaram (resolve resultado no histórico)
     const liveSet = new Set(ids);
@@ -402,7 +417,7 @@ function applyTodayOverlay(today) {
   const fmap = new Map();
   for (const lg of (today.leagues || [])) {
     for (const mt of (lg.matches || [])) {
-      if (mt.status === "finished" && mt.scoreHome != null) state.finishedScores[mt.id] = { h: mt.scoreHome, a: mt.scoreAway };
+      if (mt.status === "finished" && mt.scoreHome != null) state.finishedScores[mt.id] = { h: mt.scoreHome, a: mt.scoreAway, home: mt.home, away: mt.away };
       const fd = mt.forecast_data || {};
       const mk = fd.markets || {};
       const f = {
@@ -451,6 +466,10 @@ function analyze(m) {
 
   res.num = { xgH, xgA, corners, shots, sot, dang, possH };
   res.xgAvail = xgAvail;
+  // xG total e tendência de subida → sinal de possibilidade de gols
+  res.xgTotal = xgAvail ? round2(xgH + xgA) : null;
+  res.xgRising = xgAvail && (m.xgPrev == null || round2(xgH + xgA) >= m.xgPrev);
+  if (xgAvail) m.xgPrev = round2(xgH + xgA);
 
   /* ---- xG (30 pts) ---- */
   let xgScore = 0;
@@ -507,6 +526,11 @@ function analyze(m) {
     0.15 * clamp(xc / 0.8, 0, 1), 0, 1);
   if (cp && (numOrNull(cp.home_above_threshold_minutes) ?? 0) + (numOrNull(cp.away_above_threshold_minutes) ?? 0) >= 3)
     cornersScore = Math.min(20, cornersScore + 3);
+  // dados do gráfico de cantos (aba gráficos/cantos): pressão vs limiar, xc-momentum
+  res.aboveMin = (numOrNull(cp && cp.home_above_threshold_minutes) ?? 0) + (numOrNull(cp && cp.away_above_threshold_minutes) ?? 0);
+  res.xcMom = round2(xc);
+  res.forceMax = round1(force);
+  res.cornersChart = cp ? { threshold: numOrNull(cp.threshold) ?? 8 } : null;
 
   /* ---- Chutes / chutes no alvo (15 pts) ---- */
   const shotsPace = shots / Math.min(minute, 90);
@@ -558,6 +582,7 @@ function analyze(m) {
   res.dirStrength = strength;
   res.fire = !!ind.fire; res.ball = !!ind.ball; res.combo = !!ind.combo;
   res.cornersAlert = !!ind.corners_alert;
+  res.goalAlert = !!ind.goal_alert;
 
   res.components = comps;
   res.score = score;
@@ -566,6 +591,13 @@ function analyze(m) {
 }
 
 /* ---------------- sugestão de entrada ---------------- */
+/* P(X >= n) com X ~ Poisson(λ) — probabilidade de gols estimada a partir do xG total */
+function poissonProb(lam, n) {
+  let p = 0, term = Math.exp(-lam);
+  for (let k = 0; k < n; k++) { p += term; term *= lam / (k + 1); }
+  return 1 - p;
+}
+
 function suggestEntry(m, sc) {
   const out = [];
   const f = m.forecast || {};
@@ -576,36 +608,50 @@ function suggestEntry(m, sc) {
   const dirTeam = sc.dir === "home" ? m.home : (sc.dir === "away" ? m.away : null);
 
   const goalCands = [
-    { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1 },
-    { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2 },
-    { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3 },
+    { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1, need: 1, minXg: 0.60 },
+    { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2, need: 2, minXg: 1.30 },
+    { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3, need: 3, minXg: 2.10 },
   ];
   for (const c of goalCands) {
+    if (!c.still) continue;
     const o = over[c.key];
-    if (!c.still || !o) continue;
-    const prob = numOrNull(o.probability);
-    if (prob == null || prob < 60) continue;
+    const fProb = o ? numOrNull(o.probability) : null;
+    const fOdd = o ? numOrNull(o.market_odd) : null;
+    // sinal de xG: total subindo acima do limiar → possibilidade de gols na partida
+    const xgSig = sc.xgAvail && sc.xgRising && sc.xgTotal >= c.minXg;
+    const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : null;
+    if (fProb == null && !xgSig) continue;
+    if (fProb != null && fProb < 60 && !xgSig) continue;
+    const prob = fProb != null ? fProb : xgProb;
     out.push({
       type: "goals", label: c.label,
-      odd: numOrNull(o.market_odd),
+      odd: fOdd,
       prob: prob,
-      prio: (prob >= 70 ? 4 : 2) + (numOrNull(o.market_odd) != null ? 1 : 0) + (prob >= 80 ? 1 : 0),
+      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0),
     });
   }
 
-  // escanteios: mercado aberto + pressão real de escanteio
-  if (m.hasCornersMarket && (sc.components.corners || 0) >= 60 && sc.dirStrength >= 0.5) {
+  // escanteios: mercado aberto + pressão real do gráfico de cantos
+  // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte)
+  const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert ||
+    (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
+  // sinal forte do gráfico de cantos dispensa o gate do componente de escanteios
+  const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert ||
+    (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
+  if (m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong)) {
     let line = null;
     if (cornersExp != null) {
       line = Math.floor(cornersExp) + 0.5;
       if ((m.scoreHome + m.scoreAway) > 0) line = Math.max(line, sc.num.corners + 0.5);
       if (sc.num.corners >= line) line = sc.num.corners + 0.5;
+    } else if (sc.xcMom >= 0.4) {
+      line = sc.num.corners + 0.5; // pressão forte → pelo menos mais 1 canto
     }
     out.push({
       type: "corners",
       label: line != null ? `Mais escanteios — Over ${fmt(line, 1)}` : "Mais escanteios",
       odd: null, prob: null,
-      prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0),
+      prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0),
     });
   }
 
@@ -623,7 +669,7 @@ function suggestEntry(m, sc) {
 function buildReason(m, sc, sug) {
   const bits = [];
   const n = sc.num;
-  if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}`);
+  if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}${sc.xgRising ? " 📈" : ""}`);
   else bits.push("xG N/D");
   bits.push(sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})`
     : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado");
@@ -746,7 +792,10 @@ function maybeAlerts() {
         body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · xG ${sc.xgAvail ? fmt(sc.num.xgH) + "x" + fmt(sc.num.xgA) : "N/D"} · Momentum ${sc.momDir ? (sc.momDir === "home" ? m.home : m.away) : "equilibrado"} · ${pl(sc.num.corners, "escanteio")} · ${pl(sc.num.sot, "chute no alvo")} · Score ${score}/100` +
           (sug && sug.primary ? ` → 🟢 ${sug.primary.label}${sug.primary.odd != null ? " @ " + fmt(sug.primary.odd) : ""}` : ""),
       };
-      if (!state.alerts.some(a => a.t === "detected" && a.title === alert.title && Math.abs(a.at - now) < 3 * 60_000)) {
+      // não re-envia alerta se já existe uma entrada ABERTA para o mesmo jogo+mercado
+      const alreadyOpen = sug && sug.primary &&
+        state.history.some(h => h.result == null && h.market === sug.primary.label && sameMatch(h, m));
+      if (!alreadyOpen && !state.alerts.some(a => a.t === "detected" && a.title === alert.title && Math.abs(a.at - now) < 3 * 60_000)) {
         state.alerts.unshift(alert);
         maybeTg(alert, m, sc, sug);
       }
@@ -782,33 +831,190 @@ function maybeAlerts() {
 }
 
 /* ---------------- histórico ---------------- */
+/* mesma partida (por id; fallback por nome para entradas antigas) */
+function sameMatch(h, m) {
+  return h.id != null ? h.id === m.id : h.match === (m.home + " x " + m.away);
+}
+
+/* Limpa duplicatas do mesmo jogo+mercado: mantém a resolvida (green/red) se houver,
+   senão a mais recente. Roda uma vez na carga para remover duplicatas antigas. */
+function dedupeHistory() {
+  const rank = { green: 3, red: 3, na: 2 };
+  const best = new Map();
+  for (const h of state.history) {
+    // chave pelo nome do jogo + mercado: unifica entradas com e sem id da mesma partida
+    const key = h.match + "|" + h.market;
+    const cur = best.get(key);
+    if (!cur) { best.set(key, h); continue; }
+    const curR = rank[cur.result] ?? 1, newR = rank[h.result] ?? 1;
+    if (newR > curR || (newR === curR && h.ts > cur.ts)) best.set(key, h);
+  }
+  const kept = new Set([...best.values()]);
+  if (kept.size !== state.history.length) {
+    state.history = state.history.filter(h => kept.has(h));
+    save();
+  }
+}
+
 function ensureEntry(m, sc, sug) {
   if (!sug.primary) return;
+  // não duplica: se já existe uma entrada ABERTA (result == null) para o mesmo jogo+mercado, não cria outra
+  if (state.history.some(h => h.result == null && h.market === sug.primary.label && sameMatch(h, m))) return;
   const hour = new Date().toISOString().slice(0, 13);
   const exists = state.history.some(h => h.match === (m.home + " x " + m.away) && h.market === sug.primary.label && h.ts.slice(0, 13) === hour);
   if (exists) return;
   state.history.unshift({
     ts: new Date().toISOString(),
+    id: m.id, fi_id: m.fi_id,
     match: m.home + " x " + m.away,
     minute: m.time || (m.minute + "'"),
     market: sug.primary.label,
     odd: sug.primary.odd != null ? fmt(sug.primary.odd) : "N/D",
     score: sc.score,
+    detGoals: { h: m.scoreHome, a: m.scoreAway },   // placar no momento da detecção
     result: null,
   });
 }
-function resolveFinished(m) {
-  const fs = state.finishedScores[m.id];
-  const finals = fs ? { h: fs.h, a: fs.a } : { h: m.scoreHome, a: m.scoreAway };
+
+/* Resolve o resultado de uma entrada usando dados finais da própria RoboBet:
+   - Over X.5 Gols   → placar final (live-stats da partida encerrada / events/today)
+   - Mais escanteios → escanteios finais (live-stats final continua disponível após o apito)
+   - Próximo gol     → o time indicado marcou depois da detecção (placar final x detecção) */
+function resolveHistoryEntry(h, finals, names) {
   const total = (finals.h ?? 0) + (finals.a ?? 0);
+  if (h.market.startsWith("Over 0.5")) { h.result = total >= 1 ? "green" : "red"; return; }
+  if (h.market.startsWith("Over 1.5")) { h.result = total >= 2 ? "green" : "red"; return; }
+  if (h.market.startsWith("Over 2.5")) { h.result = total >= 3 ? "green" : "red"; return; }
+  const cm = h.market.match(/Mais escanteios[^—]*— Over (\d+(?:\.\d+)?)/);
+  if (cm) {
+    if (finals.cornersH == null || finals.cornersA == null) { queueFinalsFetch(h); return; }
+    h.result = (finals.cornersH + finals.cornersA) >= Number(cm[1]) ? "green" : "red";
+    return;
+  }
+  const ng = h.market.match(/Próximo gol — (.+)/);
+  if (ng) {
+    if (!names) { h.result = "na"; return; }
+    const det = h.detGoals;
+    if (!det || det.h == null || det.a == null) { h.result = "na"; return; }
+    const isHome = ng[1] === names.home, isAway = ng[1] === names.away;
+    if (!isHome && !isAway) { h.result = "na"; return; }   // nomes divergentes → não arrisca resultado errado
+    const scoredAfter = isHome ? finals.h > det.h : finals.a > det.a;
+    h.result = scoredAfter ? "green" : "red";
+    return;
+  }
+  h.result = "na";
+}
+
+/* Busca o live-stats final de uma partida encerrada (1× por id, em fila) para
+   verificar mercados que dependem de estatísticas finais (ex.: escanteios). */
+const finalsFetching = new Set();
+function queueFinalsFetch(h) {
+  if (h.id == null || h.result || finalsFetching.has(h.id)) return;
+  if (h._tryAt && h._tryAt > Date.now()) return;
+  h._tryAt = Date.now() + 10 * 60_000;
+  finalsFetching.add(h.id);
+  (async () => {
+    try {
+      const ls = await fetchJSON(`${API}/events/${h.id}/live-stats`, 20000, 1);
+      const st = ls && ls.stats;
+      const ft = st && (st.ft || st["2t"]);
+      if (!ft || !ft.home || !ft.away || numOrNull(ft.home.goals) == null) return;
+      const finals = {
+        h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
+        cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+      };
+      let any = false;
+      for (const e of state.history) {
+        if (e.result || e.id !== h.id) continue;
+        resolveHistoryEntry(e, finals, null);
+        any = true;
+      }
+      if (any) save();
+    } catch { /* sem live-stats → a entrada fica em aberto */ }
+    finally { finalsFetching.delete(h.id); }
+  })();
+}
+
+/* Marca green imediatamente quando o mercado da entrada já está ganho durante o
+   jogo (gols e escanteios só aumentam, então é seguro): Over 0.5 → 1º gol,
+   Over 1.5 → 2º gol, Over 2.5 → 3º gol, escanteios → linha atingida,
+   próximo gol → o time indicado marcou depois da detecção.
+   O red só é definido no apito final (resolveFinished), quando o mercado não bateu. */
+function resolveWonLive(m) {
+  const sc = m._sc;
+  const total = (m.scoreHome ?? 0) + (m.scoreAway ?? 0);
   let any = false;
   for (const h of state.history) {
-    if (h.result || h.match !== (m.home + " x " + m.away)) continue;
+    if (h.result) continue;
+    if (!sameMatch(h, m)) continue;
+    let won = false;
+    if (h.market.startsWith("Over 0.5")) won = total >= 1;
+    else if (h.market.startsWith("Over 1.5")) won = total >= 2;
+    else if (h.market.startsWith("Over 2.5")) won = total >= 3;
+    else {
+      const cm = h.market.match(/Mais escanteios[^—]*— Over (\d+(?:\.\d+)?)/);
+      if (cm) won = !!sc && sc.num.corners >= Number(cm[1]);
+      else {
+        const ng = h.market.match(/Próximo gol — (.+)/);
+        if (ng && h.detGoals && h.detGoals.h != null && h.detGoals.a != null) {
+          won = (ng[1] === m.home && m.scoreHome > h.detGoals.h) || (ng[1] === m.away && m.scoreAway > h.detGoals.a);
+        }
+      }
+    }
+    if (won) { h.result = "green"; any = true; }
+  }
+  if (any) save();
+}
+
+/* Partida saiu do vivo → busca o resultado final na própria RoboBet (live-stats
+   final, com gols + escanteios) e resolve o histórico por id (fallback por times). */
+async function resolveFinished(m) {
+  let finals = null;
+  const names = { home: m.home, away: m.away };
+  try {
+    const ls = await fetchJSON(`${API}/events/${m.id}/live-stats`, 20000, 1);
+    const st = ls && ls.stats;
+    const ft = st && (st.ft || st["2t"]);
+    if (ft && ft.home && ft.away && numOrNull(ft.home.goals) != null) {
+      finals = {
+        h: numOrNull(ft.home.goals), a: numOrNull(ft.away.goals),
+        cornersH: numOrNull(ft.home.corners) ?? 0, cornersA: numOrNull(ft.away.corners) ?? 0,
+      };
+    }
+  } catch { /* usa o fallback abaixo */ }
+  if (!finals) {
+    const fs = state.finishedScores[m.id];
+    finals = fs
+      ? { h: fs.h, a: fs.a, cornersH: null, cornersA: null }
+      : { h: m.scoreHome, a: m.scoreAway, cornersH: null, cornersA: null };
+  }
+  let any = false;
+  for (const h of state.history) {
+    if (h.result) continue;
+    if (!sameMatch(h, m)) continue;
+    resolveHistoryEntry(h, finals, names);
     any = true;
-    if (h.market.startsWith("Over 0.5")) h.result = total >= 1 ? "green" : "red";
-    else if (h.market.startsWith("Over 1.5")) h.result = total >= 2 ? "green" : "red";
-    else if (h.market.startsWith("Over 2.5")) h.result = total >= 3 ? "green" : "red";
-    else h.result = "na"; // próximo gol / escanteios: RoboBet não expõe a ordem dos eventos finais
+  }
+  if (any) save();
+}
+
+/* Resolve retroativamente entradas cujo jogo terminou (inclusive com a página
+   fechada): o /events/today expõe os finalizados do dia com placar final. */
+function resolveFinishedFromToday() {
+  const byName = new Map();
+  for (const [id, fs] of Object.entries(state.finishedScores)) {
+    if (fs.home && fs.away) byName.set(fs.home + " x " + fs.away, { id, fs });
+  }
+  let any = false;
+  for (const h of state.history) {
+    if (h.result) continue;
+    let found = null;
+    if (h.id != null && state.finishedScores[h.id]) found = { fs: state.finishedScores[h.id] };
+    else if (h.id == null) found = byName.get(h.match) || null;
+    if (!found) continue;
+    const fs = found.fs;
+    resolveHistoryEntry(h, { h: fs.h, a: fs.a, cornersH: null, cornersA: null }, { home: fs.home, away: fs.away });
+    any = true;
   }
   if (any) save();
 }
@@ -823,6 +1029,7 @@ function renderAll() {
       m._reason = m._sug ? buildReason(m, m._sc, m._sug) : null;
       if (m._sug) ensureEntry(m, m._sc, m._sug);
     } else { m._sc = null; m._sug = null; }
+    resolveWonLive(m);
   }
 
   const opps = matches.filter(m => m._sc && m._sc.valid).sort((a, b) => b._sc.score - a._sc.score || b.minute - a.minute);
@@ -833,6 +1040,7 @@ function renderAll() {
 
   renderAlerts();
   renderRanking(opps);
+  renderActive();
   renderOpps85();
   renderCards(opps);
   renderMonitor(matches);
@@ -848,12 +1056,13 @@ function renderAlerts() {
   const box = $("alerts");
   if (!state.alerts.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
+  $("alerts-summary").textContent = `Mostrar todos os alertas (${state.alerts.length})`;
   box.innerHTML = state.alerts.slice(0, 12).map(a => {
     const t = a.t === "detected";
     return `<tr class="${a.t}">
-      <td class="a-time">${new Date(a.at).toLocaleTimeString("pt-BR")}</td>
+      <td class="a-time">${new Date(a.at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+      <td><span class="a-tag ${a.t}">${t ? "🚨 DETECTADA" : "🚨 PERDEU FORÇA"}</span></td>
       <td>
-        <div class="a-tag ${a.t}">${t ? "🚨 DETECTADA" : "🚨 PERDEU FORÇA"}</div>
         <div class="a-title">${esc(a.title)}</div>
         <div class="a-body">${esc(a.body)}</div>
       </td>
@@ -863,7 +1072,9 @@ function renderAlerts() {
 
 function renderRanking(opps) {
   const box = $("ranking");
-  const hot = opps.filter(m => m._sc.score >= 85).length;
+  // só entram na lista os jogos com dica de entrada (sug.primary)
+  const withEntry = opps.filter(m => m._sug && m._sug.primary);
+  const hot = withEntry.filter(m => m._sc.score >= 85).length;
   const badge = $("hot-badge");
   if (hot) {
     badge.textContent = hot + " " + (hot === 1 ? "oportunidade" : "oportunidades") + " 85+";
@@ -871,15 +1082,15 @@ function renderRanking(opps) {
   } else {
     badge.style.display = "none";
   }
-  if (!opps.length) {
-    box.innerHTML = `<div class="empty"><b>Nenhuma oportunidade forte encontrada neste momento.</b><br><br>` +
-      `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com dados suficientes na fonte de dados.<br>` +
+  if (!withEntry.length) {
+    box.innerHTML = `<div class="empty"><b>Nenhuma oportunidade com dica de entrada neste momento.</b><br><br>` +
+      `<span style="color:var(--dim)">Nenhuma partida ao vivo atingiu ${MIN_SCORE}/100 com mercado/odd favorável na fonte de dados.<br>` +
       `O modelo não força entrada — os dados são atualizados automaticamente.</span></div>`;
     return;
   }
   box.innerHTML = `<div class="tbl-wrap"><table><thead><tr>
     <th>#</th><th>Jogo</th><th>Min</th><th>Placar</th><th>Score</th><th>xG</th><th>Momentum</th><th>Escanteios</th><th>Entrada</th>
-  </tr></thead><tbody>` + opps.map((m, i) => {
+  </tr></thead><tbody>` + withEntry.map((m, i) => {
     const sc = m._sc, sug = m._sug;
     const pill = sc.score >= 80 ? "s80" : "s70";
     return `<tr>
@@ -891,7 +1102,7 @@ function renderRanking(opps) {
       <td>${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</td>
       <td>${momText(m, sc)}</td>
       <td>${sc.num.corners}</td>
-      <td>${sug && sug.primary ? `<span class="entry-tag ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span>` : '<span class="nd">—</span>'}</td>
+      <td><span class="entry-tag ${sug.primary.type === "corners" ? "alt" : ""}">🟢 ${esc(sug.primary.label)}</span></td>
     </tr>`;
   }).join("") + "</tbody></table></div>";
 }
@@ -921,6 +1132,52 @@ function sparkline(m) {
     <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#1f2937" stroke-width="1"/>
     <polyline points="${line}" fill="none" stroke="#3b82f6" stroke-width="1.8"/>
   </svg>`;
+}
+
+/* Entradas ativas: mercados já sugeridos de jogos ainda ao vivo (uma linha por
+   jogo+mercado, mantendo a mais recente). A linha só sai quando o jogo termina
+   (o match sai de state.matches e a entrada é resolvida no histórico). */
+function renderActive() {
+  const sec = $("active-sec");
+  if (!sec) return;
+  const liveMatches = new Map();   // id -> match
+  const liveByName = new Map();    // "home x away" -> match (entradas antigas sem id)
+  for (const m of state.matches.values()) {
+    liveMatches.set(m.id, m);
+    liveByName.set(m.home + " x " + m.away, m);
+  }
+  const seen = new Map();
+  for (const h of state.history) {
+    const m = (h.id != null && liveMatches.has(h.id))
+      ? liveMatches.get(h.id)
+      : liveByName.get(h.match) || null;
+    if (!m) continue; // jogo já acabou → fora da lista de ativas
+    const key = m.id + "|" + h.market;
+    const prev = seen.get(key);
+    if (!prev || h.ts > prev.ts) seen.set(key, { h, m });
+  }
+  const entries = [...seen.values()]
+    .sort((a, b) => ((b.m._sc && b.m._sc.score) || 0) - ((a.m._sc && a.m._sc.score) || 0));
+  if (!entries.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  $("active-count").textContent =
+    entries.length + (entries.length === 1 ? " entrada ativa" : " entradas ativas") +
+    " · removidas quando o jogo terminar";
+  const tb = $("active").querySelector("tbody");
+  tb.innerHTML = entries.map(({ h, m }) => {
+    const status = h.result === "green"
+      ? '<span class="hres green">🟢 GREEN</span>'
+      : '<span class="hres na">em aberto</span>';
+    return `<tr>
+      <td><div class="teams">${esc(m.home)} x ${esc(m.away)}</div><div class="lg">${esc(m.league)}</div></td>
+      <td>${esc(m.time || (m.minute + "'"))}</td>
+      <td>${m.scoreHome} x ${m.scoreAway}</td>
+      <td>${esc(h.market)}</td>
+      <td>${esc(h.odd)}</td>
+      <td>${(m._sc && m._sc.score) || h.score}/100</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join("");
 }
 
 function renderOpps85() {
@@ -964,13 +1221,13 @@ function renderCards(opps) {
       </div><span class="score-pill ${sc.score >= 80 ? "s80" : "s70"}">${sc.score}/100</span></div>
       <div class="meta">⏱ ${esc(m.time || (m.minute + "'"))} · Placar: ${m.scoreHome} x ${m.scoreAway}${m.redH || m.redA ? ' <span class="badge">C. VERMELHO</span>' : ""}</div>
       <div class="stats">
-        <div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) : '<span class="nd">N/D</span>'}</span></div>
+        <div class="row"><span class="k">📈 xG</span><span class="v">${sc.xgAvail ? fmt(sc.num.xgH) + " x " + fmt(sc.num.xgA) + (sc.xgRising ? ' <span class="badge" style="background:rgba(34,197,94,.15);color:#4ade80;border-color:rgba(34,197,94,.35)">subindo</span>' : "") : '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">⚡ Momentum</span><span class="v">${momText(m, sc)}</span></div>
         <div class="row"><span class="k">🚩 Escanteios</span><span class="v">${sc.num.corners}${m.hasCornersMarket ? ' <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">MKT ABERTO</span>' : ""}</span></div>
         <div class="row"><span class="k">🎯 Chutes no alvo</span><span class="v">${sc.num.sot} / ${sc.num.shots}</span></div>
         <div class="row"><span class="k">💥 Ataq. perigosos</span><span class="v">${sc.num.dang || '<span class="nd">N/D</span>'}</span></div>
         <div class="row"><span class="k">🧭 Posse</span><span class="v">${sc.num.possH != null ? sc.num.possH + "% x " + (100 - sc.num.possH) + "%" : '<span class="nd">N/D</span>'}</span></div>
-        <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
+        <div class="row"><span class="k">⚽ Indicador da fonte</span><span class="v">${[sc.fire && "Fire", sc.ball && "Ball", sc.combo && "Combo", sc.cornersAlert && "Esc. alerta", sc.goalAlert && "Goal alert"].filter(Boolean).join(" · ") || '<span class="nd">—</span>'}</span></div>
       </div>
       ${sparkline(m)}
       ${sug && !sug.primary ? `<div class="entry"><div class="lab">Possível entrada</div><div class="mk"><span class="interest">Nenhum mercado com linha/odd favorável agora — monitorando.</span></div></div>` : ""}
@@ -1014,7 +1271,13 @@ function renderHistory() {
   if (!state.history.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
   const tb = $("hist").querySelector("tbody");
-  tb.innerHTML = state.history.slice(0, 60).map(h => {
+  const resolved = state.history.filter(h => h.result === "green" || h.result === "red");
+  const greens = resolved.filter(h => h.result === "green").length;
+  $("hist-summary").textContent =
+    `Últimas ${Math.min(state.history.length, 25)} de ${state.history.length} entradas · ` +
+    `${resolved.length} resolvidas (${greens} 🟢 green · ${resolved.length - greens} 🔴 red) · ` +
+    `${state.history.length - resolved.length} em aberto`;
+  tb.innerHTML = state.history.slice(0, 25).map(h => {
     const r = h.result == null ? '<span class="hres na">em aberto</span>'
       : h.result === "green" ? '<span class="hres green">🟢 GREEN</span>'
       : h.result === "red" ? '<span class="hres red">🔴 RED</span>'
@@ -1057,6 +1320,7 @@ syncTgUI();
 $("build").textContent = BUILD;
 
 /* primeira carga */
+dedupeHistory();
 tick();
 </script>
 </body>
