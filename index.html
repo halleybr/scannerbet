@@ -267,8 +267,10 @@
 
   <footer>
     <p><b>Como o modelo funciona:</b> intensidade de 0 a 100 = xG (30 pts) + Momentum (25 pts) + Escanteios (20 pts) + Chutes/Chutes no alvo (15 pts) + Ataques perigosos (10 pts).
-    Quando um indicador não está disponível na fonte de dados (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente entre os indicadores disponíveis — nenhum número é inventado.
-    Somente partidas com <b>≥ 70/100</b> e dados suficientes entram na lista de oportunidades.</p>
+    <b>Novidades:</b> detectamos aceleração de momentum (pressão crescendo), convergência de sinais (múltiplos indicadores apontando na mesma direção), e ajustes por fase do jogo (final do 2T = menos tempo; final do 1T = escanteios sobem).
+    Entradas exigem <b>convergência mínima</b> (2+ sinais para Over 0.5, 3+ para Over 1.5+ e escanteios) — o modelo não força entrada quando os dados são fracos.</p>
+    <p style="margin-top:4px">Quando um indicador não está disponível na fonte de dados (ex.: xG = N/D), a pontuação é reequilibrada proporcionalmente — nenhum número é inventado.
+    Somente partidas com <b>≥ 70/100</b> e convergência de sinais entram na lista de oportunidades.</p>
     <p style="margin-top:6px">⚠️ Scanner de oportunidades — os dados vêm em tempo real e podem conter atraso. Isto <b>não</b> é recomendação de aposta e nada é garantido.</p>
     <p style="margin-top:10px;font-size:11px">Build <b id="build"></b> · a página é estática — os dados ao vivo vêm direto da API a cada ciclo, nada é gravado no GitHub Pages. Se o número do build aqui não mudar após um push, é cache do navegador (recarregue com Ctrl+Shift+R).</p>
   </footer>
@@ -286,7 +288,7 @@
    ============================================================ */
 
 const API = "https://m.robobet.app/api";
-const BUILD = "2026-08-18T05:00-03:00"; // versão publicada — atualize a cada push para identificar cache antigo
+const BUILD = "2026-08-21T12:00-03:00"; // v2: convergência de sinais, aceleração de momentum, escanteios por fase // versão publicada — atualize a cada push para identificar cache antigo
 const MIN_SCORE = 70;         // filtro mínimo (spec §8)
 const MIN_MINUTE = 20;        // antes disso os dados são finos demais para justificar entrada
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
@@ -579,6 +581,7 @@ function analyze(m) {
   /* ---- Momentum (25 pts) ---- */
   let momScore = 0, momAvail = false, momMag = 0, momDir = null;
   const ind = ls.indicators || {};
+  let momAccel = 0; // aceleração do momentum (mudança na taxa)
   if (ls.momentum && Array.isArray(ls.momentum.timeline) && ls.momentum.timeline.length) {
     const tl = ls.momentum.timeline;
     const win = tl.slice(-Math.min(MOM_WINDOW, tl.length));
@@ -592,6 +595,20 @@ function analyze(m) {
     if (ind.momentum_trend) momScore = Math.min(25, momScore + 1);
     momDir = Math.abs(meanVal) >= 4 ? (meanVal >= 0 ? "home" : "away") : null;
     momAvail = true;
+    // --- Aceleração do momentum: compara 2 janelas recentes ---
+    // Detecta se a pressão está AUMENTANDO (momentum mais forte agora que antes)
+    if (tl.length >= 6) {
+      const half = Math.floor(tl.length / 2);
+      const recent = tl.slice(-half);
+      const older = tl.slice(-half * 2, -half);
+      const recentAvg = Math.abs(mean(recent.map(p => numOrNull(p.value) ?? 0)));
+      const olderAvg = Math.abs(mean(older.map(p => numOrNull(p.value) ?? 0)));
+      momAccel = recentAvg - olderAvg; // positivo = momentum acelerando
+      res.momAccel = round1(momAccel);
+      // Bônus para momentum acelerando (pressão crescente = maior chance de gol/escanteio)
+      if (momAccel > 3) momScore = Math.min(25, momScore + 2);
+      if (momAccel > 8) momScore = Math.min(25, momScore + 2);
+    }
   }
   res.momAvail = momAvail;
   res.momMag = round1(momMag);
@@ -600,21 +617,42 @@ function analyze(m) {
   /* ---- Escanteios (20 pts) ---- */
   const cp = ls.corners_pressure;
   let force = 0, consistency = 0, xc = 0, cpDiff = null;
+  let cpAccel = 0; // aceleração da pressão de escanteios
   if (cp && Array.isArray(cp.timeline) && cp.timeline.length) {
     const last = cp.timeline[cp.timeline.length - 1];
     force = Math.max(numOrNull(last.force_home) ?? 0, numOrNull(last.force_away) ?? 0);
     consistency = Math.max(numOrNull(last.consistency_home) ?? 0, numOrNull(last.consistency_away) ?? 0);
     xc = Math.max(Math.abs(numOrNull(last.xc_momentum_home) ?? 0), Math.abs(numOrNull(last.xc_momentum_away) ?? 0));
     cpDiff = (numOrNull(last.force_home) ?? 0) - (numOrNull(last.force_away) ?? 0);
+    // --- Aceleração da pressão de escanteios ---
+    // Compara force+xc entre 2 janelas para detectar subida
+    if (cp.timeline.length >= 4) {
+      const cpHalf = Math.floor(cp.timeline.length / 2);
+      const cpRecent = cp.timeline.slice(-cpHalf);
+      const cpOlder = cp.timeline.slice(-cpHalf * 2, -cpHalf);
+      const cpRecentForce = mean(cpRecent.map(p => Math.max(numOrNull(p.force_home) ?? 0, numOrNull(p.force_away) ?? 0)));
+      const cpOlderForce = mean(cpOlder.map(p => Math.max(numOrNull(p.force_home) ?? 0, numOrNull(p.force_away) ?? 0)));
+      cpAccel = cpRecentForce - cpOlderForce;
+      res.cpAccel = round1(cpAccel);
+      if (cpAccel > 0.08) xc += 0.2; // pressão acelerando → mais chance de escanteios
+    }
   }
   const cornersPace = corners / Math.min(minute, 90);
+  // --- Ritmo de escanteios por fase do jogo ---
+  // Fatos reais: escanteios tendem a aumentar nos últimos 15 min (fadiga + pressão)
+  const isLateGame = minute >= 75;
+  const isMidGame = minute >= 45 && minute < 75;
+  const phaseCornerBonus = isLateGame ? 0.10 : (isMidGame ? 0.05 : 0);
+  const adjustedCornersPace = cornersPace + phaseCornerBonus;
   let cornersScore = 20 * clamp(
-    0.50 * clamp(force / 1.1, 0, 1) +
-    0.15 * clamp(cornersPace / 0.12, 0, 1) +
+    0.45 * clamp(force / 1.1, 0, 1) +
+    0.20 * clamp(adjustedCornersPace / 0.12, 0, 1) +
     0.20 * clamp(consistency / 45, 0, 1) +
     0.15 * clamp(xc / 0.8, 0, 1), 0, 1);
   if (cp && (numOrNull(cp.home_above_threshold_minutes) ?? 0) + (numOrNull(cp.away_above_threshold_minutes) ?? 0) >= 3)
     cornersScore = Math.min(20, cornersScore + 3);
+  // Aceleração da pressão de escanteios = sinal forte
+  if (cpAccel > 0.12) cornersScore = Math.min(20, cornersScore + 2);
   // dados do gráfico de cantos (aba gráficos/cantos): pressão vs limiar, xc-momentum
   res.aboveMin = (numOrNull(cp && cp.home_above_threshold_minutes) ?? 0) + (numOrNull(cp && cp.away_above_threshold_minutes) ?? 0);
   res.xcMom = round2(xc);
@@ -682,9 +720,36 @@ function analyze(m) {
   res.cornersAlert = !!ind.corners_alert;
   res.goalAlert = !!ind.goal_alert;
 
+  // --- SCORE DE CONVERGÊNCIA ---
+  // Quando MÚLTIPLOS indicadores apontam na mesma direção, a chance real é maior.
+  // Conta quantos sinais fortes estão presentes simultaneamente.
+  const strongSignals = [];
+  if (xgAvail && res.xgRising) strongSignals.push('xg_rising');
+  if (momAvail && momMag >= 20) strongSignals.push('mom_strong');
+  if (momAccel > 3) strongSignals.push('mom_accel');
+  if (force >= 0.8) strongSignals.push('corners_pressure');
+  if (xc >= 0.5) strongSignals.push('xc_momentum');
+  if (cpAccel > 0.08) strongSignals.push('cp_accel');
+  if (sot >= 5) strongSignals.push('shots_target');
+  if (dang >= 25) strongSignals.push('dang_attacks');
+  if (ind.fire || ind.ball || ind.combo) strongSignals.push('fire_indicators');
+  res.strongSignals = strongSignals;
+  res.convergence = strongSignals.length;
+  // Bônus de convergência: 3+ sinais fortes = +3, 5+ = +5
+  let convergenceBonus = 0;
+  if (strongSignals.length >= 5) convergenceBonus = 5;
+  else if (strongSignals.length >= 3) convergenceBonus = 3;
+  else if (strongSignals.length >= 2) convergenceBonus = 1;
+  // --- Ajuste por fase do jogo ---
+  // Final do 2T (80'+): menos tempo para materializar → leve redução
+  // Início do 1T (<25'): dados ainda insuficientes → já coberto pela maturity
+  const latePhasePenalty = minute >= 80 ? 0.92 : 1.0;
+  // --- Score final ajustado ---
+  const rawScore = Math.round(availParts.reduce((a, p) => a + p.v * (100 / totalW), 0) * maturity * xgFactor);
+  const finalScore = Math.min(100, Math.round((rawScore + convergenceBonus) * latePhasePenalty));
   res.components = comps;
-  res.score = score;
-  res.valid = score > 0 && score >= MIN_SCORE;
+  res.score = finalScore;
+  res.valid = finalScore > 0 && finalScore >= MIN_SCORE;
 
   // ---- Eficiência de conversão (baseada em xG + finalização) ----
   const goalsTotal = (numOrNull(H.goals) ?? 0) + (numOrNull(A.goals) ?? 0);
@@ -733,14 +798,15 @@ function analyze(m) {
   }
 
   // --- Score de momentum para entradas ---
-  // Combina momentum sustentado + chutes + ataques perigosos
+  // Combina momentum sustentado + chutes + ataques perigosos + aceleração
   let momentumEntryScore = 0;
   if (momAvail) {
     const momBase = clamp(momMag / 40, 0, 1); // 0-1
     const sotBase = clamp(sot / 15, 0, 1);     // 15 chutes no alvo = máximo
     const dangBase = clamp(dang / 50, 0, 1);   // 50 ataques perigosos = máximo
+    const accelBonus = clamp(momAccel / 10, 0, 0.2); // aceleração contribui até 0.2
     const fireBonus = (res.fire || res.ball || res.combo) ? 0.15 : 0;
-    momentumEntryScore = round2(Math.min(momBase * 0.4 + sotBase * 0.3 + dangBase * 0.2 + fireBonus, 1.0));
+    momentumEntryScore = round2(Math.min(momBase * 0.35 + sotBase * 0.25 + dangBase * 0.15 + accelBonus + fireBonus, 1.0));
     res.momentumEntryScore = momentumEntryScore;
   }
 
@@ -763,6 +829,18 @@ function suggestEntry(m, sc) {
   const goals = m.scoreHome + m.scoreAway;
   const minute = Math.max(m.minute, 1);
 
+  // --- GATE DE CONVERGÊNCIA PARA ENTRADAS ---
+  // Exige que pelo menos N sinais fortes estejam presentes para gerar entrada.
+  // Isso filtra falsos positivos e melhora a assertividade.
+  const convergence = sc.convergence || 0;
+  const isSharp = convergence >= 3;    // 3+ sinais = entrada confiável
+  const isStrong = convergence >= 5;   // 5+ sinais = entrada muito forte
+  // Para Over 0.5 Gol aceita convergência menor (mercado mais fácil)
+  const minConvForGoals = 2;
+  // Para Over 1.5+ e escanteios exige convergência maior
+  const minConvForHighGoals = 3;
+  const minConvForCorners = 3;
+
   // após 85' de jogo não se sugere mais entradas de gols (pouco tempo restante)
   const lateGame = m.minute > 85;
   // no 1º tempo até os 38', sinal de gol vira entrada do 1º tempo (e não do jogo inteiro),
@@ -774,22 +852,25 @@ function suggestEntry(m, sc) {
     const htOdd = ht ? (numOrNull(ht.market_odd) ?? numOrNull(ht.fair_odd)) : null;
     const ft05Prob = over.over_05_ft ? numOrNull(over.over_05_ft.probability) : null;
     const xg05 = sc.xgAvail && sc.xgRising && sc.xgTotal >= 0.60;
-    if (ft05Prob >= 60 || xg05) {
+    // Aceita 1T se: forecast forte OU xG convergente
+    const htConvOK = convergence >= minConvForGoals || xg05;
+    if ((ft05Prob >= 65 || xg05) && htConvOK) {
       const prob = htProb ?? ft05Prob ?? Math.round(poissonProb(sc.xgTotal, 1) * 100);
       out.push({
         type: "goals",
         label: "Over 0.5 Gol 1º Tempo",
         odd: htOdd,
         prob: prob,
-        prio: (prob >= 70 ? 4 : 2) + (htOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xg05 ? 1 : 0),
+        prio: (prob >= 75 ? 4 : 2) + (htOdd != null ? 1 : 0) + (prob >= 85 ? 1 : 0) + (xg05 ? 1 : 0) + (isStrong ? 2 : 0),
+        source: xg05 ? 'xG' : 'forecast',
       });
       htGoalPushed = true;
     }
   }
   const goalCands = [
-    { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1, need: 1, minXg: 0.60 },
-    { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2, need: 2, minXg: 1.30 },
-    { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3, need: 3, minXg: 2.10 },
+    { key: "over_05_ft", label: "Over 0.5 Gol", still: goals < 1, need: 1, minXg: 0.60, minConv: minConvForGoals },
+    { key: "over_15_ft", label: "Over 1.5 Gols", still: goals < 2, need: 2, minXg: 1.30, minConv: minConvForHighGoals },
+    { key: "over_25_ft", label: "Over 2.5 Gols", still: goals < 3, need: 3, minXg: 2.10, minConv: minConvForHighGoals },
   ];
   for (const c of goalCands) {
     if (htGoalPushed) break; // já entrou no 1º tempo → não entra no jogo inteiro
@@ -801,67 +882,118 @@ function suggestEntry(m, sc) {
     // sinal de xG: real ou estimado por momentum
     const xgSig = sc.xgAvail && sc.xgRising && sc.xgTotal >= c.minXg;
     // Quando xG real não disponível, usa estimativa baseada em momentum + chutes
-    // Aceita xG estimado se: xG >= minimo E (momentumEntry >= 0.3 OU xG >= 1.5)
+    // Aceita xG estimado se: xG >= minimo E (momentumEntry >= 0.3 OU xG >= 1.5) E convergência OK
     const useEstXG = !xgSig && sc.estXG != null && sc.estXG >= c.minXg && 
-      (sc.momentumEntryScore >= 0.3 || sc.estXG >= 1.5) && sc.momAvail;
-    // Nova condição: xG subindo + chutes no alvo >= 3 + xG >= minimo
-    const xgRisingWithShots = !xgSig && !useEstXG && sc.xgRising && sc.num.sot >= 3 && sc.xgTotal >= c.minXg;
+      (sc.momentumEntryScore >= 0.3 || sc.estXG >= 1.5) && sc.momAvail && convergence >= c.minConv;
+    // Nova condição: xG subindo + chutes no alvo >= 3 + xG >= minimo + convergência OK
+    const xgRisingWithShots = !xgSig && !useEstXG && sc.xgRising && sc.num.sot >= 3 && sc.xgTotal >= c.minXg && convergence >= c.minConv;
     // Alta atividade: muitos ataques perigosos + chutes + chutes a gol (sem necessidade de forecast/xG)
+    // Exige convergência ainda maior (sem forecast, só dados do jogo)
     const highActivity = !xgSig && !useEstXG && !xgRisingWithShots && 
-      sc.num.dang >= 40 && sc.num.shots >= 15 && sc.num.sot >= 5 && 
-      minute >= 10 && !lateGame;
+      sc.num.dang >= 45 && sc.num.shots >= 18 && sc.num.sot >= 6 && 
+      minute >= 15 && !lateGame && convergence >= (c.minConv + 1);
     const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) 
       : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) 
       : (xgRisingWithShots ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : null));
     if (fProb == null && !xgSig && !useEstXG && !xgRisingWithShots && !highActivity) continue;
-    if (fProb != null && fProb < 45 && !xgSig && !useEstXG && !xgRisingWithShots && !highActivity) continue;
+    if (fProb != null && fProb < 50 && !xgSig && !useEstXG && !xgRisingWithShots && !highActivity) continue;
     const prob = fProb != null ? fProb : xgProb;
     if (prob == null) continue;
+    // --- Ajuste de probabilidade com momentum ---
+    // Se momentum está acelerando, aumenta levemente a probabilidade estimada
+    let adjustedProb = prob;
+    if (sc.momAccel > 3 && prob < 90) adjustedProb = Math.min(95, prob + Math.round(sc.momAccel * 0.5));
+    // Se convergência é alta, boosting adicional
+    if (convergence >= 5 && adjustedProb < 90) adjustedProb = Math.min(95, adjustedProb + 3);
     out.push({
       type: "goals", label: c.label,
       odd: fOdd,
-      prob: prob,
-      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0) + (xgRisingWithShots ? 1 : 0) + (highActivity ? 2 : 0),
+      prob: adjustedProb,
+      origProb: prob,
+      prio: (adjustedProb >= 75 ? 4 : 2) + (fOdd != null ? 1 : 0) + (adjustedProb >= 85 ? 1 : 0) 
+        + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0) + (xgRisingWithShots ? 1 : 0) + (highActivity ? 2 : 0)
+        + (isStrong ? 2 : 0) + (sc.momAccel > 3 ? 1 : 0),
       source: xgSig ? 'xG' : (useEstXG ? 'est' : (xgRisingWithShots ? 'xG+shots' : (highActivity ? 'activity' : 'forecast'))),
     });
   }
 
-  // escanteios: mercado aberto + pressão real do gráfico de cantos
-  // (force vs threshold, minutos acima do limiar, xc-momentum ou alerta da fonte).
-  // Também usa momentum sustentado como sinal de pressão
+  // --- ESCANTEIOS: modelo preditivo melhorado ---
+  // Combina: pressão do gráfico + momentum + fase do jogo + aceleração
   const momCornersSignal = sc.momAvail && sc.momMag >= 20 && (sc.num.sot >= 5 || sc.num.dang >= 25);
   const cpSig = sc.aboveMin >= 3 || sc.xcMom >= 0.6 || sc.cornersAlert || momCornersSignal ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
   // sinal forte do gráfico de cantos dispensa o gate do componente de escanteios
   const cpStrong = sc.xcMom >= 1.0 || sc.aboveMin >= 5 || sc.cornersAlert || momCornersSignal ||
     (sc.cornersChart && sc.forceMax >= sc.cornersChart.threshold);
-  if (m.minute >= 55 && (sc.xcRising || cpStrong || momCornersSignal) && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 50 || cpStrong)) {
+  // --- Fase do jogo para escanteios ---
+  // Escanteios tendem a aumentar nos últimos 15 min (fadiga + pressão desesperada)
+  // e no final do 1T (equipes se abrem para tentar gol antes do intervalo)
+  const isLatePhase = minute >= 75; // últimos 15 min = mais escanteios
+  const isEndFirstHalf = minute >= 38 && minute <= 45; // final do 1T
+  const cornerPhaseBoost = isLatePhase ? 1.25 : (isEndFirstHalf ? 1.10 : 1.0);
+  // Ritmo atual de escanteios
+  const currentCornerPace = sc.num.corners / Math.max(minute, 1);
+  // Projeção de escanteios restantes com base no ritmo + boost de fase
+  const remaining = Math.max(90 - minute, 5);
+  const projectedRemaining = currentCornerPace * remaining * cornerPhaseBoost;
+  const projectedTotal = sc.num.corners + projectedRemaining;
+  // Threshold mínimo para entrada: convergência + mercado aberto + tempo suficiente
+  const cornerMinTime = isLatePhase ? 55 : 50; // no final do jogo, só entra com mais dados
+  if (minute >= cornerMinTime && (sc.xcRising || cpStrong || momCornersSignal || (sc.cpAccel > 0.1 && sc.momAvail)) && m.hasCornersMarket && cpSig && ((sc.components.corners || 0) >= 55 || cpStrong) && convergence >= minConvForCorners) {
     // enquanto houver uma entrada de escanteio ABERTA (sem green) no mesmo jogo, não envia outra
     const openCorners = state.history.some(h =>
       h.result == null && /^Mais escanteios/.test(h.market) && sameMatch(h, m));
     if (!openCorners) {
       let line = null;
+      // --- Cálculo de linha inteligente ---
+      // Usa projeção do modelo (ritmo + fase) em vez de só forecast
       if (cornersExp != null) {
-        line = Math.floor(cornersExp) + 1.5; // projeção + 1 escanteio a mais
-      } else if (sc.xcMom >= 0.4) {
-        line = sc.num.corners + 1.5; // pressão forte → atual + 1 escanteio extra
+        // Forecast da RoboBet disponível
+        const forecastLine = Math.floor(cornersExp) + 1.5;
+        // Compara com projeção por ritmo
+        const paceLine = Math.floor(projectedTotal) + 0.5;
+        // Usa a MENOR entre forecast e projeção (mais conservador = mais acertivo)
+        line = Math.min(forecastLine, paceLine);
+        // Mas nunca abaixo do atual + 1
+        if (line <= sc.num.corners) line = sc.num.corners + 1.5;
+      } else if (sc.xcMom >= 0.5) {
+        // Sem forecast: usa projeção por ritmo
+        line = Math.floor(projectedTotal) + 0.5;
+        if (line <= sc.num.corners) line = sc.num.corners + 1.5;
+      } else if (sc.num.corners >= 4 && currentCornerPace >= 0.08) {
+        // Jogo com escanteios razoáveis e ritmo decente
+        line = sc.num.corners + Math.max(1.5, Math.round(projectedRemaining * 0.5) + 0.5);
       }
-      if (line != null && sc.num.corners >= line) line = sc.num.corners + 1.5; // nunca abaixo do atual + 1
-      // evita entrada absurda: confere quantos escanteios já saíram e se a linha é
-      // alcançável até o fim do jogo (ritmo forte sustentável ≈ 0,2 escanteio/min,
-      // entre 2 e 6 extras de uma vez) — ex.: aos 62' com 6 cantos, linha > 12,5 é inviável
+      // --- Validação de viabilidade ---
       if (line != null) {
-        const remaining = Math.max(90 - minute, 5);
-        const maxExtra = Math.max(2, Math.min(6, Math.round(0.2 * remaining)));
-        if (line > sc.num.corners + maxExtra) line = null; // inviável → não entra
+        // Nunca abaixo do atual + 1
+        if (line <= sc.num.corners) line = sc.num.corners + 1.5;
+        // Não entra se a linha é muito alta (inv)
+        const maxExtra = isLatePhase 
+          ? Math.max(2, Math.min(5, Math.round(0.25 * remaining)))  // final do jogo: mais escanteios possíveis
+          : Math.max(2, Math.min(6, Math.round(0.2 * remaining)));
+        if (line > sc.num.corners + maxExtra) line = null;
+        // Mínimo de escanteios no jogo para entrada (evita jogos secos)
+        if (sc.num.corners < 2 && minute < 60) line = null;
       }
       if (line != null) {
+        // Score de confiança do escanteio
+        const cornerConf = (sc.components.corners || 0) >= 75 ? 'high' : ((sc.components.corners || 0) >= 55 ? 'mid' : 'low');
+        const cornerPrio = 3 
+          + ((sc.components.corners || 0) >= 75 ? 1 : 0) 
+          + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0) 
+          + (momCornersSignal ? 1 : 0)
+          + (sc.cpAccel > 0.12 ? 1 : 0)  // aceleração da pressão
+          + (isLatePhase ? 1 : 0)        // final do jogo = mais confiável
+          + (isStrong ? 2 : 0);           // convergência alta
         out.push({
           type: "corners",
           label: `Mais escanteios — Over ${fmt(line, 1)}`,
           odd: null, prob: null,
-          prio: 3 + ((sc.components.corners || 0) >= 75 ? 1 : 0) + (sc.aboveMin >= 5 || sc.xcMom >= 0.9 ? 1 : 0) + (momCornersSignal ? 1 : 0),
-          source: sc.xcRising ? 'xc' : (momCornersSignal ? 'momentum' : 'chart'),
+          prio: cornerPrio,
+          source: sc.xcRising ? 'xc' : (momCornersSignal ? 'momentum' : (sc.cpAccel > 0.1 ? 'accel' : 'chart')),
+          projected: round1(projectedTotal),
+          cornerConf: cornerConf,
         });
       }
     }
@@ -869,21 +1001,26 @@ function suggestEntry(m, sc) {
 
   out.sort((a, b) => b.prio - a.prio);
   const primary = out[0] || null;
-  const strong = primary && (sc.score >= 85) && (primary.type !== "goals" || primary.prob >= 70);
-  return { entries: out.slice(0, 3), primary, strong, goals, cornersExp };
+  // --- Definição de "entrada forte" ---
+  // Agora exige convergência alta + score alto + probabilidade adequada
+  const strong = primary && (sc.score >= 85) && convergence >= 3 
+    && (primary.type !== "goals" || (primary.prob >= 70 && primary.prob != null));
+  return { entries: out.slice(0, 3), primary, strong, goals, cornersExp, convergence, isSharp, isStrong };
 }
 
 function buildReason(m, sc, sug) {
   const bits = [];
   const n = sc.num;
-  // Detecta se a entrada veio de alta atividade (ataques perigosos + chutes altos)
-  const isHighActivity = n.dang >= 40 && n.shots >= 15 && n.sot >= 5;
+  const isHighActivity = n.dang >= 45 && n.shots >= 18 && n.sot >= 6;
   if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}${sc.xgRising ? " 📈" : ""}`);
   else if (sc.estXG != null) bits.push(`xG est: ~${fmt(sc.estXG)}${sc.estXgRising ? " 📈" : ""}`);
   else bits.push("xG N/D");
-  bits.push(sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})`
-    : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado");
-  bits.push(pl(n.corners, "escanteio"));
+  // Momentum com aceleração
+  let momBits = sc.momDir ? `momentum para ${sc.momDir === "home" ? m.home : m.away} (${sc.momMag})` 
+    : sc.momMag >= 14 ? `jogo aberto (momentum ${sc.momMag})` : "momentum equilibrado";
+  if (sc.momAccel > 3) momBits += ` acelerando (+${fmt(sc.momAccel, 0)})`;
+  bits.push(momBits);
+  bits.push(pl(n.corners, "escanteio") + (sc.cpAccel > 0.08 ? ` 📈 pressão subindo` : ""));
   bits.push(pl(n.shots, "chute") + ` (${n.sot} no alvo)`);
   if (n.dang > 0) bits.push(pl(n.dang, "ataque perigoso", "ataques perigosos"));
   if (isHighActivity) bits.push("alta atividade");
@@ -891,7 +1028,9 @@ function buildReason(m, sc, sug) {
   if (m.redH || m.redA) bits.push("cartão vermelho");
   if (sug.cornersExp != null) bits.push(`escanteios esperados ${fmt(sug.cornersExp, 1)}`);
   if (sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.5) bits.push(`momentum entry: ${Math.round(sc.momentumEntryScore * 100)}%`);
-  return bits.slice(0, 6).join(" + ") + ".";
+  // Convergência: quantos sinais fortes
+  if (sug.convergence >= 3) bits.push(`⚡ ${sug.convergence} sinais convergindo`);
+  return bits.slice(0, 7).join(" + ") + ".";
 }
 
 /* ---------------- Telegram ---------------- */
@@ -1630,7 +1769,10 @@ function renderCards(opps) {
     // Entrada ativa do histórico (quando o jogo não está mais como oportunidade)
     const activeH = !sug ? (state.history.find(h => !h.result && (h.id === m.id || h.match === m.home + ' x ' + m.away)) || null) : null;
     const score = sc ? sc.score : (activeH ? activeH.score : 0);
-    const conf = score >= 85 ? `<span class="conf high">Confiança: Alta</span>` : `<span class="conf mid">Confiança: Média</span>`;
+    const conv = sug ? (sug.convergence || 0) : 0;
+    const confLabel = score >= 85 && conv >= 4 ? 'Muito Alta' : (score >= 85 ? 'Alta' : (conv >= 3 ? 'Média+' : 'Média'));
+    const confClass = (score >= 85 && conv >= 4) || conv >= 5 ? 'high' : (score >= 85 || conv >= 3 ? 'mid' : 'mid');
+    const conf = `<span class="conf ${confClass}">Confiança: ${confLabel}</span>` + (conv >= 3 ? ` <span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">${conv} sinais</span>` : '');
     const strength = sug && sug.strong ? `<span class="strong">🟢 ENTRADA FORTE</span>` : `<span class="interest">🟡 ENTRADA INTERESSANTE</span>`;
     const alts = sug ? sug.entries.slice(1) : [];
     const c = sc ? sc.components : null;
