@@ -295,6 +295,7 @@ const MIN_MINUTE = 20;        // antes disso os dados são finos demais para jus
 const MOM_WINDOW = 10;        // janela recente de momentum (minutos)
 const HISTORY_LIMIT = 200;
 const ALERT_LIMIT = 40;
+const ENTRY_COOLDOWN_MS = 10 * 60 * 1000; // 10 min cooldown após resolução (green/red) antes de permitir nova entrada no mesmo jogo
 
 /* ---------------- estado ---------------- */
 const state = {
@@ -1280,6 +1281,10 @@ function ensureEntry(m, sc, sug) {
   if (!sug.primary) return;
   // não duplica: se já existe uma entrada ABERTA (result == null) para o mesmo jogo+mercado, não cria outra
   if (state.history.some(h => h.result == null && h.market === sug.primary.label && sameMatch(h, m))) return;
+  // cooldown: não cria nova entrada para o mesmo jogo se uma entrada foi resolvida
+  // (green/red/na) nos últimos ENTRY_COOLDOWN_MS — evita a corrente "ganhou → gera nova".
+  // Após o cooldown, o modelo pode reavaliar e criar nova entrada se as estatísticas justificarem.
+  if (state.history.some(h => h.result != null && sameMatch(h, m) && h.resolvedAt && (Date.now() - h.resolvedAt) < ENTRY_COOLDOWN_MS)) return;
   const hour = new Date().toISOString().slice(0, 13);
   const exists = state.history.some(h => h.match === (m.home + " x " + m.away) && h.market === sug.primary.label && h.ts.slice(0, 13) === hour);
   if (exists) return;
@@ -1304,6 +1309,8 @@ function ensureEntry(m, sc, sug) {
    - Próximo gol     → o time indicado marcou depois da detecção (placar final x detecção) */
 function resolveHistoryEntry(h, finals, names) {
   resolveHistoryEntryInner(h, finals, names);
+  // Marca timestamp da resolução para cooldown
+  if (h.result) h.resolvedAt = Date.now();
   // Telegram: avisa o resultado quando a entrada resolve
   if (h.result && tg.enabled && tg.fwdLost) {
     const parts = [];
@@ -1402,7 +1409,7 @@ function resolveWonLive(m) {
         const need = hm ? Number(hm[1]) + 0.5 : 1;
         if (htGoals >= need) won = true;
         else if (m.period === "2t" || m.period === "HT" || m.minute >= 46) {
-          h.result = "red"; any = true;
+          h.result = "red"; h.resolvedAt = Date.now(); any = true;
           tgResult(h, "1º tempo encerrado sem o gol");
           continue;
         }
@@ -1422,7 +1429,7 @@ function resolveWonLive(m) {
       }
     }
     if (won) {
-      h.result = "green"; any = true;
+      h.result = "green"; h.resolvedAt = Date.now(); any = true;
       tgResult(h, `⏱ ${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway}`);
     }
   }
