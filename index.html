@@ -170,6 +170,7 @@
       <span class="chip">Jogos Ao Vivo: <b style="color:#4ade80;font-weight:800;font-size:1.1em" id="hud-live">–</b></span>
       <span class="chip">Atualizado: <b id="hud-updated">–</b></span>
       <span class="chip">Próxima: <b id="hud-next">–</b></span>
+      <span class="chip" id="hud-status" style="font-size:11px">🟡 Iniciando…</span>
       <select id="interval" title="Intervalo de atualização">
         <option value="15">15s</option>
         <option value="20">20s</option>
@@ -1897,10 +1898,96 @@ function importHistory(input) {
   rd.readAsText(f);
 }
 
-/* ---------------- loop ---------------- */
+/* ---------------- WebSocket client ---------------- */
+let ws = null;
+let wsReconnectTimer = null;
+const WS_RECONNECT_MS = 3000;
+const WS_URL = (location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host + "/ws";
+
+function wsConnect() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch { scheduleNext(); return; }
+  ws.onopen = () => {
+    clearTimeout(state.timer);
+    state.wsConnected = true;
+    updateWsIndicator();
+    console.log("[WS] connected");
+  };
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      handleWsMessage(msg);
+    } catch {}
+  };
+  ws.onclose = () => {
+    state.wsConnected = false;
+    updateWsIndicator();
+    console.log("[WS] disconnected — reconnecting");
+    wsReconnectTimer = setTimeout(wsConnect, WS_RECONNECT_MS);
+  };
+  ws.onerror = () => { ws.close(); };
+}
+
+function handleWsMessage(msg) {
+  if (msg.type !== "tick" && msg.type !== "init") return;
+  const now = Date.now();
+  const incoming = msg.matches || {};
+  const finishedScores = msg.finishedScores || {};
+  // Merge incoming data into state.matches
+  const incomingIds = new Set(Object.keys(incoming));
+  for (const [id, data] of Object.entries(incoming)) {
+    let m = state.matches.get(id);
+    if (m) {
+      // Update existing match
+      Object.assign(m, data);
+    } else {
+      m = data;
+      state.matches.set(id, m);
+    }
+    m._wsReceived = now;
+  }
+  // Remove matches no longer in the live list
+  for (const [id, gone] of Array.from(state.matches)) {
+    if (!incomingIds.has(id)) {
+      resolveFinished(gone);
+      state.matches.delete(id);
+    }
+  }
+  // Apply finished scores from today overlay
+  if (finishedScores) {
+    for (const [id, fs] of Object.entries(finishedScores)) {
+      state.finishedScores[id] = fs;
+    }
+  }
+  renderAll();
+  maybeAlerts();
+  save();
+  state.lastError = null;
+  $("errbox").style.display = "none";
+  state.cycle = msg.cycle || (state.cycle + 1);
+  scheduleNext();
+}
+
+function updateWsIndicator() {
+  const hud = $("hud-status");
+  if (!hud) return;
+  if (state.wsConnected) {
+    hud.textContent = "🟢 Tempo real";
+    hud.style.color = "#4ade80";
+  } else {
+    hud.textContent = "🟡 Polling";
+    hud.style.color = "#fbbf24";
+  }
+}
+
+/* ---------------- loop (fallback: polling direto) ---------------- */
 function scheduleNext() {
   clearTimeout(state.timer);
   if (state.paused) { $("hud-next").textContent = "pausado"; return; }
+  // If WS is connected, don't schedule fallback polling
+  if (state.wsConnected) { $("hud-next").textContent = "tempo real"; return; }
   state.nextAt = Date.now() + state.intervalMs;
   $("hud-next").textContent = new Date(state.nextAt).toLocaleTimeString("pt-BR");
   state.timer = setTimeout(() => { $("hud-next").textContent = "atualizando…"; tick(); }, state.intervalMs);
@@ -1913,7 +2000,7 @@ $("interval").addEventListener("change", (e) => {
 $("pause").addEventListener("click", () => {
   state.paused = !state.paused;
   $("pause").textContent = state.paused ? "▶ Retomar" : "⏸ Pausar";
-  if (!state.paused) tick(); else scheduleNext();
+  if (!state.paused) { if (!state.wsConnected) tick(); } else scheduleNext();
 });
 $("refresh").addEventListener("click", () => { $("hud-next").textContent = "atualizando…"; tick(); });
 
@@ -1933,7 +2020,17 @@ if (!state.history.length) {
   }
 }
 dedupeHistory();
-tick();
+
+/* Tentar WebSocket primeiro; se falhar, cai no polling direto */
+state.wsConnected = false;
+wsConnect();
+// Fallback: se após 5s não conectou WS, usa polling direto
+setTimeout(() => {
+  if (!state.wsConnected) {
+    console.log("[WS] fallback to direct polling");
+    tick();
+  }
+}, 5000);
 </script>
 </body>
 </html>

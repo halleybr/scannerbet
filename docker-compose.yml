@@ -5,11 +5,27 @@ services:
       dockerfile: Dockerfile
     container_name: scannergreen
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "3000:80"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/health"]
       interval: 30s
       timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scannergreen-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 15s
+      timeout: 5s
       retries: 3
       start_period: 10s
