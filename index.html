@@ -1733,7 +1733,12 @@ function renderOpps85() {
   const grid = $("opps85");
   const opps = Array.from(state.matches.values())
     .filter(m => m._sc && m._sc.valid && m._sc.score >= 85)
-    .sort((a, b) => b._sc.score - a._sc.score || b.minute - a.minute);
+    .sort((a, b) => {
+      const aHT = a.period === 'HT' ? 1 : 0;
+      const bHT = b.period === 'HT' ? 1 : 0;
+      if (aHT !== bHT) return aHT - bHT;
+      return b._sc.score - a._sc.score || b.minute - a.minute;
+    });
   if (!opps.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
   grid.innerHTML = opps.map(m => {
