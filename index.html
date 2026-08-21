@@ -806,19 +806,23 @@ function suggestEntry(m, sc) {
       (sc.momentumEntryScore >= 0.3 || sc.estXG >= 1.5) && sc.momAvail;
     // Nova condição: xG subindo + chutes no alvo >= 3 + xG >= minimo
     const xgRisingWithShots = !xgSig && !useEstXG && sc.xgRising && sc.num.sot >= 3 && sc.xgTotal >= c.minXg;
+    // Alta atividade: muitos ataques perigosos + chutes + chutes a gol (sem necessidade de forecast/xG)
+    const highActivity = !xgSig && !useEstXG && !xgRisingWithShots && 
+      sc.num.dang >= 40 && sc.num.shots >= 15 && sc.num.sot >= 5 && 
+      minute >= 10 && !lateGame;
     const xgProb = xgSig ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) 
       : (useEstXG ? Math.round(poissonProb(sc.estXG, c.need) * 100) 
       : (xgRisingWithShots ? Math.round(poissonProb(sc.xgTotal, c.need) * 100) : null));
-    if (fProb == null && !xgSig && !useEstXG && !xgRisingWithShots) continue;
-    if (fProb != null && fProb < 45 && !xgSig && !useEstXG && !xgRisingWithShots) continue;
+    if (fProb == null && !xgSig && !useEstXG && !xgRisingWithShots && !highActivity) continue;
+    if (fProb != null && fProb < 45 && !xgSig && !useEstXG && !xgRisingWithShots && !highActivity) continue;
     const prob = fProb != null ? fProb : xgProb;
     if (prob == null) continue;
     out.push({
       type: "goals", label: c.label,
       odd: fOdd,
       prob: prob,
-      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0) + (xgRisingWithShots ? 1 : 0),
-      source: xgSig ? 'xG' : (useEstXG ? 'est' : (xgRisingWithShots ? 'xG+shots' : 'forecast')),
+      prio: (prob >= 70 ? 4 : 2) + (fOdd != null ? 1 : 0) + (prob >= 80 ? 1 : 0) + (xgSig ? 1 : 0) + (useEstXG ? 1 : 0) + (xgRisingWithShots ? 1 : 0) + (highActivity ? 2 : 0),
+      source: xgSig ? 'xG' : (useEstXG ? 'est' : (xgRisingWithShots ? 'xG+shots' : (highActivity ? 'activity' : 'forecast'))),
     });
   }
 
@@ -872,6 +876,8 @@ function suggestEntry(m, sc) {
 function buildReason(m, sc, sug) {
   const bits = [];
   const n = sc.num;
+  // Detecta se a entrada veio de alta atividade (ataques perigosos + chutes altos)
+  const isHighActivity = n.dang >= 40 && n.shots >= 15 && n.sot >= 5;
   if (sc.xgAvail) bits.push(`xG ${fmt(n.xgH)}x${fmt(n.xgA)}${sc.xgRising ? " 📈" : ""}`);
   else if (sc.estXG != null) bits.push(`xG est: ~${fmt(sc.estXG)}${sc.estXgRising ? " 📈" : ""}`);
   else bits.push("xG N/D");
@@ -880,11 +886,12 @@ function buildReason(m, sc, sug) {
   bits.push(pl(n.corners, "escanteio"));
   bits.push(pl(n.shots, "chute") + ` (${n.sot} no alvo)`);
   if (n.dang > 0) bits.push(pl(n.dang, "ataque perigoso", "ataques perigosos"));
+  if (isHighActivity) bits.push("alta atividade");
   if (sc.fire || sc.ball || sc.combo) bits.push(sc.fire && sc.ball ? "Fire+Ball ativos" : (sc.fire ? "Fire ativo" : (sc.ball ? "Ball ativo" : "Combo ativo")));
   if (m.redH || m.redA) bits.push("cartão vermelho");
   if (sug.cornersExp != null) bits.push(`escanteios esperados ${fmt(sug.cornersExp, 1)}`);
   if (sc.momentumEntryScore != null && sc.momentumEntryScore >= 0.5) bits.push(`momentum entry: ${Math.round(sc.momentumEntryScore * 100)}%`);
-  return bits.slice(0, 5).join(" + ") + ".";
+  return bits.slice(0, 6).join(" + ") + ".";
 }
 
 /* ---------------- Telegram ---------------- */
@@ -1049,6 +1056,21 @@ function maybeAlerts() {
         state.alerts.unshift({
           t: "detected", at: now,
           title: `⚽ xG SUBINDO — ${m.home} x ${m.away}`,
+          body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} → 🟢 Entrada gerada · Score ${sc.score}/100`,
+        });
+      }
+    }
+    // Alerta de alta atividade (muitos ataques perigosos + chutes)
+    if (sc.num.dang >= 40 && sc.num.shots >= 15 && sc.num.sot >= 5 && m.minute >= 10 && !lateGame) {
+      const sug = m._sug;
+      const hasGoalEntry = sug && sug.entries && sug.entries.some(e => e.type === 'goals');
+      const dup = state.alerts.some(a => a.t === "detected" && a.title.includes(m.home) && a.title.includes('ATIVIDADE') && Math.abs(a.at - now) < 5 * 60_000);
+      if (!dup && hasGoalEntry) {
+        const parts = [`ataques: ${sc.num.dang}`, `chutes: ${sc.num.shots}`, `no alvo: ${sc.num.sot}`];
+        if (sc.momDir) parts.push(`momentum: ${sc.momDir === 'home' ? m.home : m.away}`);
+        state.alerts.unshift({
+          t: "detected", at: now,
+          title: `🔥 ALTA ATIVIDADE — ${m.home} x ${m.away}`,
           body: `${m.time || (m.minute + "'")} · ${m.scoreHome}x${m.scoreAway} · ${parts.join(' · ')} → 🟢 Entrada gerada · Score ${sc.score}/100`,
         });
       }
